@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Ultimate CAD Viewer</title>
+<style>
+:root {
+  --accent:#00d4ff; --accent2:#ff7b2c; --bg:#0d0f14;
+  --panel:rgba(18,22,32,0.96); --border:rgba(255,255,255,0.09);
+  --text:#e4eaf4; --muted:#6b7a90; --green:#2ecc71; --red:#e74c3c;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{overflow:hidden;background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:var(--text);touch-action:none;width:100vw;height:100vh;}
+#container{position:fixed;inset:0;}
+
+/* ===== SIDEBAR ===== */
+#sidebar{
+  position:fixed;top:0;left:0;bottom:0;width:270px;
+  background:var(--panel);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;z-index:100;
+  backdrop-filter:blur(20px);
+}
+#sidebar-header{
+  padding:14px 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+#sidebar-header h1{font-size:13px;font-weight:700;letter-spacing:.06em;color:var(--accent);}
+#sidebar-header p{font-size:10px;color:var(--muted);margin-top:2px;}
+
+#sidebar-body{flex:1;overflow-y:auto;padding:10px 12px 16px;}
+#sidebar-body::-webkit-scrollbar{width:4px;}
+#sidebar-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px;}
+
+/* open button */
+#open-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:11px;margin-bottom:10px;
+  background:var(--accent);color:#000;font-weight:700;font-size:13px;
+  border:none;border-radius:8px;cursor:pointer;transition:all .15s;
+}
+#open-btn:hover{background:#33dcff;box-shadow:0 0 18px rgba(0,212,255,.4);}
+
+/* sections */
+.sec{margin-bottom:14px;}
+.sec-title{
+  font-size:9px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.15em;
+  margin-bottom:8px;display:flex;align-items:center;gap:6px;
+}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* buttons */
+.btn{
+  width:100%;padding:8px 10px;border-radius:7px;border:1px solid var(--border);
+  background:rgba(255,255,255,.05);color:var(--text);font-size:11px;font-weight:600;
+  cursor:pointer;transition:all .15s;font-family:inherit;text-align:left;
+  display:flex;align-items:center;gap:6px;margin-bottom:4px;
+}
+.btn:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);}
+.btn.active{background:var(--accent);border-color:var(--accent);color:#000;}
+.btn.danger{color:var(--red);border-color:rgba(231,76,60,.3);}
+.btn.danger:hover{background:rgba(231,76,60,.15);}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;}
+.btn-row .btn{margin-bottom:0;}
+.btn-row3{grid-template-columns:1fr 1fr 1fr;}
+
+/* sliders */
+.slider-wrap{margin-bottom:8px;}
+.slider-label{font-size:10px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:3px;}
+input[type=range]{
+  width:100%;height:4px;-webkit-appearance:none;
+  background:rgba(255,255,255,.1);border-radius:2px;outline:none;cursor:pointer;
+  accent-color:var(--accent);
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--accent);border:2px solid #000;cursor:pointer;
+}
+
+/* measure result */
+.measure-box{
+  background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);
+  border-radius:6px;padding:7px 10px;font-size:11px;font-family:monospace;
+  margin-bottom:6px;color:var(--accent);text-align:center;
+}
+/* measure line in 3D */
+.measure-label-3d{
+  position:fixed;background:rgba(0,0,0,.8);border:1px solid var(--accent);
+  color:var(--accent);font-size:11px;font-family:monospace;
+  padding:3px 7px;border-radius:4px;pointer-events:none;z-index:200;
+  display:none;white-space:nowrap;
+}
+
+/* part list */
+.part-item{
+  display:flex;align-items:center;gap:6px;padding:5px 6px;
+  border-radius:6px;margin-bottom:3px;cursor:pointer;
+  border:1px solid transparent;transition:all .12s;font-size:11px;
+}
+.part-item:hover{background:rgba(255,255,255,.07);}
+.part-item.selected{border-color:var(--accent);background:rgba(0,212,255,.08);}
+.part-color{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+.part-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+.part-vis{cursor:pointer;color:var(--muted);font-size:13px;flex-shrink:0;transition:color .12s;}
+.part-vis:hover{color:var(--text);}
+.part-vis.hidden{color:var(--red);}
+
+/* status bar */
+#statusbar{
+  flex-shrink:0;padding:8px 14px;border-top:1px solid var(--border);
+  font-size:10px;color:var(--muted);display:flex;align-items:center;gap:7px;
+}
+#status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;transition:all .3s;}
+#status-dot.loading{background:var(--accent);animation:blink .7s infinite;}
+#status-dot.error{background:var(--red);}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.2;}}
+
+/* loading overlay */
+#loading-ov{
+  position:fixed;inset:0;background:rgba(13,15,20,.9);
+  display:none;align-items:center;justify-content:center;
+  flex-direction:column;gap:14px;z-index:500;backdrop-filter:blur(6px);
+}
+#loading-ov.show{display:flex;}
+.spinner{width:44px;height:44px;border:3px solid rgba(255,255,255,.08);
+  border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.ld-t{font-size:14px;font-weight:600;color:var(--text);}
+.ld-s{font-size:11px;color:var(--muted);}
+
+/* axis indicator */
+#axis-canvas{position:fixed;bottom:14px;right:14px;width:80px;height:80px;z-index:90;pointer-events:none;}
+
+/* viewport hint */
+#hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+  font-size:10px;color:rgba(255,255,255,.25);
+  background:rgba(0,0,0,.4);padding:4px 12px;border-radius:14px;
+  pointer-events:none;z-index:90;white-space:nowrap;}
+
+/* info overlay */
+#info-ov{
+  position:fixed;top:14px;right:14px;
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:10px;padding:10px 13px;min-width:160px;
+  font-size:11px;display:none;z-index:90;backdrop-filter:blur(16px);
+}
+.info-row{display:flex;justify-content:space-between;gap:12px;padding:2px 0;}
+.info-l{color:var(--muted);}
+.info-v{color:var(--accent);font-weight:700;}
+
+/* clip axis tabs */
+.tab-row{display:flex;gap:3px;margin-bottom:6px;}
+.tab{flex:1;padding:5px;border-radius:5px;border:1px solid var(--border);
+  background:rgba(255,255,255,.04);color:var(--muted);font-size:10px;font-weight:600;
+  cursor:pointer;text-align:center;transition:all .12s;font-family:inherit;}
+.tab.active{background:var(--accent2);border-color:var(--accent2);color:#000;}
+
+/* color swatches */
+.swatch-row{display:flex;gap:5px;margin-bottom:6px;flex-wrap:wrap;}
+.swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:transform .12s;}
+.swatch:hover{transform:scale(1.2);}
+.swatch.active{border-color:#fff;}
+
+/* mobile */
+@media(max-width:600px){
+  #sidebar{width:100%;height:50%;top:auto;bottom:0;border-right:none;border-top:1px solid var(--border);}
+  #hint{bottom:calc(50% + 14px);}
+  #axis-canvas{bottom:calc(50% + 14px);}
+}
+</style>
+</head>
+<body>
+<div id="container"></div>
+
+<!-- 3D measure label -->
+<div class="measure-label-3d" id="measure-label"></div>
+
+<!-- Loading overlay -->
+<div id="loading-ov">
+  <div class="spinner"></div>
+  <div class="ld-t" id="ld-txt">読み込み中...</div>
+  <div class="ld-s" id="ld-sub">しばらくお待ちください</div>
+</div>
+
+<!-- Info overlay -->
+<div id="info-ov">
+  <div class="info-row"><span class="info-l">メッシュ数</span><span class="info-v" id="i-mesh">—</span></div>
+  <div class="info-row"><span class="info-l">三角形数</span><span class="info-v" id="i-tris">—</span></div>
+  <div class="info-row"><span class="info-l">X幅</span><span class="info-v" id="i-x">—</span></div>
+  <div class="info-row"><span class="info-l">Y幅</span><span class="info-v" id="i-y">—</span></div>
+  <div class="info-row"><span class="info-l">Z高さ</span><span class="info-v" id="i-z">—</span></div>
+  <div class="info-row"><span class="info-l">形式</span><span class="info-v" id="i-fmt">—</span></div>
+</div>
+
+<!-- Axis canvas -->
+<canvas id="axis-canvas" width="80" height="80"></canvas>
+
+<!-- Hint -->
+<div id="hint">ドラッグ:回転　ホイール:ズーム　右ドラッグ:パン</div>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1>◈ ULTIMATE CAD VIEWER</h1>
+    <p>STEP / STL / 3MF — プロフェッショナル3Dビューア</p>
+  </div>
+
+  <div id="sidebar-body">
+    <!-- Open -->
+    <label id="open-btn" for="file-in">📂 ファイルを開く</label>
+    <input type="file" id="file-in" accept=".step,.stp,.stl,.3mf" style="display:none">
+
+    <!-- View mode -->
+    <div class="sec">
+      <div class="sec-title">表示モード</div>
+      <div class="btn-row btn-row3">
+        <button class="btn active" id="m-solid"  onclick="setMode('solid')">🟧 ソリッド</button>
+        <button class="btn"        id="m-wire"   onclick="setMode('wire')">🔲 ワイヤー</button>
+        <button class="btn"        id="m-both"   onclick="setMode('both')">✳ 両方</button>
+      </div>
+    </div>
+
+    <!-- Material -->
+    <div class="sec">
+      <div class="sec-title">質感プリセット</div>
+      <div class="btn-row btn-row3">
+        <button class="btn active" id="mat-normal" onclick="setMat('normal')">通常</button>
+        <button class="btn"        id="mat-metal"  onclick="setMat('metal')">金属</button>
+        <button class="btn"        id="mat-glass"  onclick="setMat('glass')">半透明</button>
+      </div>
+    </div>
+
+    <!-- Color -->
+    <div class="sec">
+      <div class="sec-title">カラー</div>
+      <div class="swatch-row" id="swatch-row">
+        <div class="swatch active" style="background:#ff7b2c" onclick="setColor(0xff7b2c,this)"></div>
+        <div class="swatch" style="background:#00d4ff"        onclick="setColor(0x00d4ff,this)"></div>
+        <div class="swatch" style="background:#2ecc71"        onclick="setColor(0x2ecc71,this)"></div>
+        <div class="swatch" style="background:#c0cad8"        onclick="setColor(0xc0cad8,this)"></div>
+        <div class="swatch" style="background:#f4c430"        onclick="setColor(0xf4c430,this)"></div>
+        <div class="swatch" style="background:#e74c3c"        onclick="setColor(0xe74c3c,this)"></div>
+        <div class="swatch" style="background:#9b59b6"        onclick="setColor(0x9b59b6,this)"></div>
+        <div class="swatch" style="background:#ffffff"        onclick="setColor(0xffffff,this)"></div>
+      </div>
+    </div>
+
+    <!-- Clipping -->
+    <div class="sec">
+      <div class="sec-title">断面表示</div>
+      <div class="tab-row">
+        <button class="tab active" id="clip-x-tab" onclick="setClipAxis('x')">X軸</button>
+        <button class="tab"        id="clip-y-tab" onclick="setClipAxis('y')">Y軸</button>
+        <button class="tab"        id="clip-z-tab" onclick="setClipAxis('z')">Z軸</button>
+        <button class="tab"        id="clip-off-tab" onclick="setClipAxis('off')">OFF</button>
+      </div>
+      <div class="slider-wrap">
+        <div class="slider-label"><span>断面位置</span><span id="clip-val">OFF</span></div>
+        <input type="range" id="clip-range" min="-1" max="1" step="0.01" value="1">
+      </div>
+    </div>
+
+    <!-- Explode -->
+    <div class="sec">
+      <div class="sec-title">分解ビュー</div>
+      <div class="slider-wrap">
+        <div class="slider-label"><span>分解レベル</span><span id="explode-val">0</span></div>
+        <input type="range" id="explode-range" min="0" max="2" step="0.01" value="0">
+      </div>
+    </div>
+
+    <!-- Measure -->
+    <div class="sec">
+      <div class="sec-title">距離計測</div>
+      <div class="measure-box" id="measure-out">モデル上の2点をクリック</div>
+      <button class="btn danger" onclick="clearMeasure()">✕ 計測リセット</button>
+    </div>
+
+    <!-- Parts list -->
+    <div class="sec">
+      <div class="sec-title">パーツ一覧</div>
+      <div id="parts-list"><div style="font-size:10px;color:var(--muted);text-align:center;padding:8px 0;">ファイルを読み込むとパーツが表示されます</div></div>
+      <div class="btn-row" style="margin-top:6px;">
+        <button class="btn" onclick="setAllVisible(true)">👁 全表示</button>
+        <button class="btn" onclick="setAllVisible(false)">🚫 全非表示</button>
+      </div>
+    </div>
+
+    <!-- View controls -->
+    <div class="sec">
+      <div class="sec-title">視点・その他</div>
+      <div class="btn-row btn-row3">
+        <button class="btn" onclick="setView('front')">正面</button>
+        <button class="btn" onclick="setView('top')">上面</button>
+        <button class="btn" onclick="setView('side')">側面</button>
+      </div>
+      <div class="btn-row btn-row3">
+        <button class="btn" onclick="setView('iso')">等角</button>
+        <button class="btn" onclick="resetView()">🏠 リセット</button>
+        <button class="btn" id="btn-rot" onclick="toggleAutoRot()">⟳ 回転</button>
+      </div>
+      <button class="btn" id="btn-info" onclick="toggleInfo()">ℹ モデル情報</button>
+      <button class="btn" onclick="screenshot()">📷 スクリーンショット</button>
+    </div>
+  </div>
+
+  <div id="statusbar">
+    <div id="status-dot"></div>
+    <span id="status-txt">STEP / STL / 3MF ファイルを選択してください</span>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.142.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.142.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.142.0/examples/js/loaders/STLLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/occt-import-js@0.0.22/dist/occt-import-js.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.1/fflate.min.js"></script>
+<script>
+// ============================================================
+// 自前ZIPパーサー (fflate CDNが使えない環境用フォールバック)
+// 3MFファイルはDeflate圧縮またはStored形式のZIP
+// ============================================================
+const _zip = (()=>{
+  // Inflate (Deflate解凍) の実装
+  // inflate用のルックアップテーブル
+  function makeTable(){
+    const t=new Uint32Array(256);
+    for(let i=0;i<256;i++){
+      let c=i;
+      for(let j=0;j<8;j++) c=c&1?(0xEDB88320^(c>>>1)):c>>>1;
+      t[i]=c;
+    }
+    return t;
+  }
+  const CRC_TABLE=makeTable();
+
+  function crc32(buf){
+    let c=0xFFFFFFFF;
+    for(let i=0;i<buf.length;i++) c=CRC_TABLE[(c^buf[i])&0xFF]^(c>>>8);
+    return (c^0xFFFFFFFF)>>>0;
+  }
+
+  // 固定ハフマン符号テーブル
+  function fixedHuffman(){
+    const ll=new Uint8Array(288);
+    for(let i=0;i<144;i++)  ll[i]=8;
+    for(let i=144;i<256;i++) ll[i]=9;
+    for(let i=256;i<280;i++) ll[i]=7;
+    for(let i=280;i<288;i++) ll[i]=8;
+    const dl=new Uint8Array(32);
+    dl.fill(5);
+    return {ll,dl};
+  }
+
+  function buildTree(lengths){
+    const maxBits=Math.max(...lengths);
+    const blCount=new Uint16Array(maxBits+1);
+    lengths.forEach(l=>{ if(l>0)blCount[l]++; });
+    const nextCode=new Uint16Array(maxBits+1);
+    let code=0;
+    for(let bits=1;bits<=maxBits;bits++){
+      code=(code+blCount[bits-1])<<1;
+      nextCode[bits]=code;
+    }
+    const codes=new Uint16Array(lengths.length);
+    lengths.forEach((l,i)=>{
+      if(l>0){ codes[i]=nextCode[l]++; }
+    });
+    return {codes,lengths:new Uint8Array(lengths)};
+  }
+
+  function reverseBits(val,bits){
+    let r=0;
+    for(let i=0;i<bits;i++){ r=(r<<1)|(val&1); val>>=1; }
+    return r;
+  }
+
+  function inflate(input){
+    let pos=0; // bit position
+    let bytePos=0;
+    const out=[];
+
+    function readBit(){
+      const b=(input[bytePos]>>>(pos&7))&1;
+      pos++;
+      if((pos&7)===0) bytePos++;
+      return b;
+    }
+    function readBits(n){
+      let v=0;
+      for(let i=0;i<n;i++) v|=readBit()<<i;
+      return v;
+    }
+    function readCode(tree){
+      let code=0,len=0;
+      while(len<20){
+        code=(code<<1)|readBit(); len++;
+        for(let i=0;i<tree.codes.length;i++){
+          if(tree.lengths[i]===len && reverseBits(tree.codes[i],len)===code)
+            return i;
+        }
+      }
+      throw new Error('invalid huffman code');
+    }
+
+    bytePos=0; pos=0;
+
+    let bFinal=0;
+    do{
+      bFinal=readBits(1);
+      const bType=readBits(2);
+
+      if(bType===0){
+        // Stored
+        if(pos&7){ pos=((pos>>3)+1)*8; bytePos=pos>>3; }
+        const len=input[bytePos]|(input[bytePos+1]<<8);
+        bytePos+=4;
+        for(let i=0;i<len;i++) out.push(input[bytePos++]);
+        pos=bytePos*8;
+
+      } else if(bType===1||bType===2){
+        let llTree,distTree;
+        if(bType===1){
+          const {ll,dl}=fixedHuffman();
+          llTree=buildTree(Array.from(ll));
+          distTree=buildTree(Array.from(dl));
+        } else {
+          const hlit=readBits(5)+257;
+          const hdist=readBits(5)+1;
+          const hclen=readBits(4)+4;
+          const clOrder=[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+          const clLens=new Uint8Array(19);
+          for(let i=0;i<hclen;i++) clLens[clOrder[i]]=readBits(3);
+          const clTree=buildTree(Array.from(clLens));
+          const lens=[];
+          while(lens.length<hlit+hdist){
+            const c=readCode(clTree);
+            if(c<16){ lens.push(c); }
+            else if(c===16){ const rep=readBits(2)+3; for(let i=0;i<rep;i++) lens.push(lens[lens.length-1]); }
+            else if(c===17){ const rep=readBits(3)+3; for(let i=0;i<rep;i++) lens.push(0); }
+            else { const rep=readBits(7)+11; for(let i=0;i<rep;i++) lens.push(0); }
+          }
+          llTree=buildTree(lens.slice(0,hlit));
+          distTree=buildTree(lens.slice(hlit));
+        }
+
+        const lenExtra=[0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+        const lenBase=[3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+        const distExtra=[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+        const distBase=[1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+
+        while(true){
+          const sym=readCode(llTree);
+          if(sym===256) break;
+          if(sym<256){ out.push(sym); }
+          else {
+            const li=sym-257;
+            const length=lenBase[li]+readBits(lenExtra[li]);
+            const di=readCode(distTree);
+            const dist=distBase[di]+readBits(distExtra[di]);
+            const start=out.length-dist;
+            for(let i=0;i<length;i++) out.push(out[start+i]);
+          }
+        }
+      }
+    } while(!bFinal);
+
+    return new Uint8Array(out);
+  }
+
+  function readU16(buf,off){ return buf[off]|(buf[off+1]<<8); }
+  function readU32(buf,off){ return (buf[off]|(buf[off+1]<<8)|(buf[off+2]<<16)|(buf[off+3]<<24))>>>0; }
+
+  function unzipSync(data){
+    const result={};
+    // Central directoryから全エントリを列挙
+    let pos=data.length-22;
+    while(pos>=0 && !(data[pos]===0x50&&data[pos+1]===0x4B&&data[pos+2]===0x05&&data[pos+3]===0x06)) pos--;
+    if(pos<0) throw new Error('ZIP EOCDが見つかりません');
+
+    const cdOffset=readU32(data,pos+16);
+    const cdSize  =readU32(data,pos+12);
+    const cdCount =readU16(data,pos+8);
+
+    let cdPos=cdOffset;
+    for(let i=0;i<cdCount;i++){
+      if(readU32(data,cdPos)!==0x02014B50) break;
+      const method    =readU16(data,cdPos+10);
+      const fnLen     =readU16(data,cdPos+28);
+      const extraLen  =readU16(data,cdPos+30);
+      const commentLen=readU16(data,cdPos+32);
+      const localOff  =readU32(data,cdPos+42);
+      const name      =new TextDecoder().decode(data.slice(cdPos+46,cdPos+46+fnLen));
+      cdPos+=46+fnLen+extraLen+commentLen;
+
+      // ローカルヘッダ
+      const lhPos=localOff;
+      if(readU32(data,lhPos)!==0x04034B50) continue;
+      const lFnLen  =readU16(data,lhPos+26);
+      const lExtLen =readU16(data,lhPos+28);
+      const compSize=readU32(data,lhPos+18);
+      const dataPos =lhPos+30+lFnLen+lExtLen;
+
+      const compressed=data.slice(dataPos,dataPos+compSize);
+      if(method===0){
+        result[name]=compressed;
+      } else if(method===8){
+        result[name]=inflate(compressed);
+      }
+    }
+    return result;
+  }
+
+  return { unzipSync };
+})();
+
+// fflateが読み込まれていなければ自前実装を使う
+if(typeof fflate === 'undefined'){
+  window.fflate = _zip;
+}
+</script>
+<script>
+// ================================================================
+// INIT
+// ================================================================
+const scene    = new THREE.Scene();
+scene.background = new THREE.Color(0x0d0f14);
+
+const camera   = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100000);
+camera.position.set(300,300,300);
+
+const renderer = new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.localClippingEnabled = true;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('container').appendChild(renderer.domElement);
+
+// OrbitControls — ダンピングで滑らかな操作
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping    = true;
+controls.dampingFactor    = 0.08;
+controls.screenSpacePanning = true;
+controls.minDistance      = 0.1;
+controls.maxDistance      = 50000;
+
+// Lights
+const ambL  = new THREE.AmbientLight(0xffffff, 0.55); scene.add(ambL);
+const dirL1 = new THREE.DirectionalLight(0xffffff, 1.1);
+dirL1.position.set(1,2,1.5); dirL1.castShadow=true; scene.add(dirL1);
+const dirL2 = new THREE.DirectionalLight(0x99ccff, 0.5);
+dirL2.position.set(-1,-0.5,1); scene.add(dirL2);
+const dirL3 = new THREE.DirectionalLight(0xffddaa, 0.3);
+dirL3.position.set(0,-2,-1); scene.add(dirL3);
+
+// Grid
+const gridHelper = new THREE.GridHelper(2000,50,0x1e2530,0x161c26);
+scene.add(gridHelper);
+
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+// ================================================================
+// STATE
+// ================================================================
+let modelGroup = null;
+let partMeshes = [];      // {mesh, wireMesh, origPos, color, name, visible}
+let curMode    = 'solid';
+let curMat     = 'normal';
+let curColor   = 0xff7b2c;
+let autoRot    = false;
+let infoVisible= false;
+let occtInst   = null;
+let selectedPart = null;
+
+// Clipping planes
+const clipPlanes = {
+  x: new THREE.Plane(new THREE.Vector3(-1,0,0), 10000),
+  y: new THREE.Plane(new THREE.Vector3(0,-1,0), 10000),
+  z: new THREE.Plane(new THREE.Vector3(0,0,-1), 10000),
+};
+let activeClipAxis = 'off';
+
+// ================================================================
+// MATERIAL FACTORY
+// ================================================================
+function makeMat(color, matType){
+  const planes = activeClipAxis === 'off' ? [] : [clipPlanes[activeClipAxis]];
+  if(matType==='metal'){
+    return new THREE.MeshStandardMaterial({
+      color, metalness:0.85, roughness:0.12,
+      clippingPlanes:planes, side:THREE.DoubleSide
+    });
+  }
+  if(matType==='glass'){
+    return new THREE.MeshPhongMaterial({
+      color, transparent:true, opacity:0.38, shininess:120,
+      clippingPlanes:planes, side:THREE.DoubleSide
+    });
+  }
+  return new THREE.MeshPhysicalMaterial({
+    color, metalness:0.05, roughness:0.5, clearcoat:0.2,
+    clippingPlanes:planes, side:THREE.DoubleSide
+  });
+}
+function makeWireMat(){
+  return new THREE.MeshBasicMaterial({
+    color:0xffffff, wireframe:true, opacity:0.07, transparent:true
+  });
+}
+
+// ================================================================
+// 3MF PARSER  v3 — 正規表現ベース（namespace問題を完全回避）
+// BambuStudio拡張（p:path外部参照）対応
+// ================================================================
+async function parse3MF(buffer){
+  const uint8 = new Uint8Array(buffer);
+  const zipFiles = fflate.unzipSync(uint8);
+
+  // ファイルマップ（先頭スラッシュ除去・大文字小文字を両方登録）
+  const fileMap = new Map();
+  Object.keys(zipFiles).forEach(k=>{
+    const key = k.replace(/^\//,'');
+    fileMap.set(key, zipFiles[k]);
+    fileMap.set(key.toLowerCase(), zipFiles[k]);
+  });
+  function getFile(path){
+    const key = path.replace(/^\//,'');
+    return fileMap.get(key) || fileMap.get(key.toLowerCase()) || null;
+  }
+  function getText(path){
+    const bytes = getFile(path);
+    return bytes ? new TextDecoder().decode(bytes) : null;
+  }
+
+  // メインモデル取得
+  const mainXml = getText('3D/3dmodel.model');
+  if(!mainXml) throw new Error('3D/3dmodel.model が見つかりません');
+
+  // ----- ヘルパー関数 -----
+  // 属性値取得（namespace prefixを無視）
+  function getAttr(tag, name){
+    // "name" or "prefix:name" の両方にマッチ
+    const re = new RegExp(`(?:^|\\s)(?:[\\w]+:)?${name}="([^"]*)"`, 'i');
+    const m = tag.match(re);
+    return m ? m[1] : null;
+  }
+  // タグを全抽出（self-closingも対応）
+  function findTags(xml, tagName){
+    const re = new RegExp(`<${tagName}(?:\\s[^>]*)?>`, 'gi');
+    return [...xml.matchAll(re)].map(m=>m[0]);
+  }
+  // 要素の内容を取得
+  function getInner(xml, tagName){
+    const re = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i');
+    const m = xml.match(re);
+    return m ? m[1] : '';
+  }
+
+  // ----- build items を取得 -----
+  const buildSection = getInner(mainXml, 'build');
+  const itemTags = findTags(buildSection, 'item');
+
+  // ----- objectセクションを取得 -----
+  // resources内の各objectタグとその内容
+  const resourcesSection = getInner(mainXml, 'resources');
+  const objectBlocks = [...resourcesSection.matchAll(
+    /<object\s([^>]*)>([\s\S]*?)<\/object>/gi
+  )];
+
+  // objectId -> {attrs, content} マップ
+  const mainObjMap = new Map();
+  objectBlocks.forEach(m => {
+    const id = getAttr(m[1], 'id');
+    if(id) mainObjMap.set(id, { attrs: m[1], content: m[2] });
+  });
+
+  // ----- 外部ファイルキャッシュ -----
+  const extCache = new Map();
+  function getExtXml(path){
+    const key = path.replace(/^\//,'');
+    if(extCache.has(key)) return extCache.get(key);
+    const xml = getText(key);
+    extCache.set(key, xml);
+    return xml;
+  }
+
+  // ----- transform パース（3MF列優先3x4行列） -----
+  function parseTf(str){
+    if(!str) return null;
+    const m = str.trim().split(/[\s,]+/).map(parseFloat).filter(n=>!isNaN(n));
+    if(m.length < 12) return null;
+    const mat = new THREE.Matrix4();
+    mat.set(m[0],m[3],m[6],m[9], m[1],m[4],m[7],m[10], m[2],m[5],m[8],m[11], 0,0,0,1);
+    return mat;
+  }
+  function composeTf(parentStr, childStr){
+    const mp = parseTf(parentStr), mc = parseTf(childStr);
+    if(mp && mc) return mp.multiply(mc);
+    return mp || mc || null;
+  }
+
+  // ----- メッシュ生成 -----
+  function buildMesh(xml, tfMat, color, name){
+    // <vertices>内の全<vertex>を取得
+    const vertSection = getInner(xml, 'vertices');
+    const vertTags    = [...vertSection.matchAll(/<vertex\s([^>]*)\/>/gi)];
+    if(!vertTags.length) return;
+
+    const triSection = getInner(xml, 'triangles');
+    const triTags    = [...triSection.matchAll(/<triangle\s([^>]*)\/>/gi)];
+    if(!triTags.length) return;
+
+    const positions = new Float32Array(vertTags.length * 3);
+    vertTags.forEach((m,i)=>{
+      positions[i*3]   = parseFloat(getAttr(m[1],'x')||0);
+      positions[i*3+1] = parseFloat(getAttr(m[1],'y')||0);
+      positions[i*3+2] = parseFloat(getAttr(m[1],'z')||0);
+    });
+    const indices = new Uint32Array(triTags.length * 3);
+    triTags.forEach((m,i)=>{
+      indices[i*3]   = parseInt(getAttr(m[1],'v1')||0);
+      indices[i*3+1] = parseInt(getAttr(m[1],'v2')||0);
+      indices[i*3+2] = parseInt(getAttr(m[1],'v3')||0);
+    });
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
+    geo.setIndex(new THREE.Uint32BufferAttribute(indices,1));
+    if(tfMat) geo.applyMatrix4(tfMat);
+    geo.computeVertexNormals();
+    addPart(geo, color, name);
+  }
+
+  // ----- build itemsを処理 -----
+  let partIndex = 0;
+
+  for(const itemTag of itemTags){
+    const oid        = getAttr(itemTag, 'objectid');
+    const buildTfStr = getAttr(itemTag, 'transform');
+    const obj        = mainObjMap.get(oid);
+    if(!obj) continue;
+
+    const name  = getAttr(obj.attrs, 'name') || `Part_${partIndex+1}`;
+    const color = new THREE.Color().setHSL(((partIndex*137.5)%360)/360, 0.65, 0.55);
+
+    // component（BambuStudio: p:pathで外部参照）を探す
+    const compMatches = [...obj.content.matchAll(/<component\s([^>]*)\/>/gi)];
+
+    if(compMatches.length > 0){
+      for(const cm of compMatches){
+        const extPath   = getAttr(cm[1], 'path');     // p:path or path
+        const refId     = getAttr(cm[1], 'objectid');
+        const compTfStr = getAttr(cm[1], 'transform');
+        const combinedTf = composeTf(buildTfStr, compTfStr);
+
+        if(extPath){
+          // 外部ファイル参照
+          const extXml = getExtXml(extPath);
+          if(!extXml) continue;
+          // 外部ファイル内の対象objectを探す
+          const extObjMatch = extXml.match(
+            new RegExp(`<object[^>]*\\bid="${refId}"[^>]*>([\\s\\S]*?)</object>`, 'i')
+          );
+          if(extObjMatch) buildMesh(extObjMatch[1], combinedTf, color, name);
+        } else {
+          // 同一ファイル内参照
+          const refObj = mainObjMap.get(refId);
+          if(refObj) buildMesh(refObj.content, combinedTf, color, name);
+        }
+      }
+    } else {
+      // 直接meshを持つobject
+      buildMesh(obj.content, parseTf(buildTfStr), color, name);
+    }
+    partIndex++;
+  }
+
+  // build itemsが空 → 全objectを処理
+  if(partIndex === 0){
+    mainObjMap.forEach((obj, oid)=>{
+      if(/type="support"/i.test(obj.attrs)) return;
+      const color = new THREE.Color().setHSL(((partIndex*137.5)%360)/360, 0.65, 0.55);
+      buildMesh(obj.content, null, color, `Part_${partIndex+1}`);
+      partIndex++;
+    });
+  }
+
+  if(partMeshes.length === 0) throw new Error('3MFからジオメトリを生成できませんでした');
+}
+
+// 旧ヘルパー関数（削除 — parse3MF v3に統合済み）
+function parseTransform(str){ return null; }  // unused
+function composeTransform(a,b){ return null; } // unused
+function buildMeshFromObject(){ }              // unused
+
+// ================================================================
+// LOAD FILE
+// ================================================================
+document.getElementById('file-in').addEventListener('change', e=>{
+  if(e.target.files[0]) loadFile(e.target.files[0]);
+  e.target.value='';
+});
+
+async function loadFile(file){
+  const ext = file.name.toLowerCase();
+  const isSTEP = ext.endsWith('.step')||ext.endsWith('.stp');
+  const isSTL  = ext.endsWith('.stl');
+  const is3MF  = ext.endsWith('.3mf');
+  if(!isSTEP&&!isSTL&&!is3MF){ setStatus('error','❌ .step/.stp/.stl/.3mf のみ対応'); return; }
+
+  setStatus('loading',`読み込み中: ${file.name}`);
+  showLoading(true,'ファイルを解析中...', file.name+' ('+Math.round(file.size/1024)+' KB)');
+
+  // 既存モデルをクリア
+  if(modelGroup){ scene.remove(modelGroup); }
+  modelGroup = new THREE.Group();
+  partMeshes = [];
+  clearMeasure();
+  document.getElementById('explode-range').value=0;
+  document.getElementById('clip-range').value=1;
+  activeClipAxis='off';
+  updateClipTabs();
+
+  try{
+    const buffer = await file.arrayBuffer();
+
+    if(isSTEP){
+      document.getElementById('ld-txt').textContent='OpenCASCADE をロード中...';
+      if(!occtInst){
+        document.getElementById('ld-sub').textContent='初回のみ数秒かかります';
+        occtInst = await occtimportjs();
+      }
+      document.getElementById('ld-txt').textContent='STEPを解析中...';
+      const result = occtInst.ReadStepFile(new Uint8Array(buffer), null);
+      document.getElementById('ld-txt').textContent='メッシュを構築中...';
+
+      result.meshes.forEach((md, i)=>{
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(md.attributes.position.array,3));
+        if(md.attributes.normal) geo.setAttribute('normal', new THREE.Float32BufferAttribute(md.attributes.normal.array,3));
+        if(md.index) geo.setIndex(new THREE.Uint32BufferAttribute(md.index.array,1));
+        geo.computeVertexNormals();
+        const hue = (i * 137.5) % 360;
+        const col = new THREE.Color().setHSL(hue/360, 0.65, 0.55);
+        addPart(geo, col, `Part_${i+1}`);
+      });
+      document.getElementById('i-fmt').textContent='STEP / AP214';
+
+    } else if(isSTL) {
+      document.getElementById('ld-txt').textContent='STLを解析中...';
+      const geo = new THREE.STLLoader().parse(buffer);
+      geo.computeVertexNormals();
+      addPart(geo, new THREE.Color(curColor), 'STL Model');
+      document.getElementById('i-fmt').textContent='STL';
+
+    } else if(is3MF) {
+      document.getElementById('ld-txt').textContent='3MFを解析中...';
+      await parse3MF(buffer);
+      document.getElementById('i-fmt').textContent='3MF';
+    }
+
+    scene.add(modelGroup);
+    fitCamera();
+    buildPartsList();
+    updateModelInfo();
+    applyMode(curMode);
+    setStatus('ready',`✅ 読み込み完了 — ${partMeshes.length}パーツ`);
+
+  } catch(err){
+    console.error(err);
+    setStatus('error','❌ 読み込み失敗: '+(err.message||'不明なエラー'));
+  } finally {
+    showLoading(false);
+  }
+}
+
+function addPart(geo, color, name){
+  geo.computeBoundingBox();
+  const solid = new THREE.Mesh(geo, makeMat(color, curMat));
+  const wire  = new THREE.Mesh(geo, makeWireMat());
+  wire.visible = (curMode !== 'solid');
+  solid.castShadow = true;
+  solid.receiveShadow = true;
+  modelGroup.add(solid);
+  modelGroup.add(wire);
+  partMeshes.push({
+    solid, wire,
+    origPos: solid.position.clone(),
+    color: color.clone(),
+    name,
+    visible: true
+  });
+}
+
+// ================================================================
+// PARTS LIST
+// ================================================================
+function buildPartsList(){
+  const el = document.getElementById('parts-list');
+  el.innerHTML = '';
+  partMeshes.forEach((p,i)=>{
+    const item = document.createElement('div');
+    item.className = 'part-item';
+    item.dataset.idx = i;
+    const hex = '#'+p.color.getHexString();
+    item.innerHTML = `
+      <div class="part-color" style="background:${hex}"></div>
+      <span class="part-name" title="${p.name}">${p.name}</span>
+      <span class="part-vis" data-idx="${i}" onclick="togglePartVis(${i},event)" title="表示/非表示">👁</span>
+    `;
+    item.addEventListener('click', ()=> selectPart(i));
+    el.appendChild(item);
+  });
+}
+
+function selectPart(idx){
+  selectedPart = idx;
+  document.querySelectorAll('.part-item').forEach((el,i)=>{
+    el.classList.toggle('selected', i===idx);
+  });
+  // フォーカス
+  const p = partMeshes[idx];
+  if(!p) return;
+  const box = new THREE.Box3().setFromObject(p.solid);
+  const center = new THREE.Vector3(); box.getCenter(center);
+  const size = new THREE.Vector3(); box.getSize(size);
+  controls.target.copy(center);
+  const dist = Math.max(size.x,size.y,size.z)*2;
+  camera.position.copy(center).add(new THREE.Vector3(dist,dist,dist));
+  controls.update();
+}
+
+function togglePartVis(idx, e){
+  e.stopPropagation();
+  const p = partMeshes[idx];
+  p.visible = !p.visible;
+  p.solid.visible = p.visible && (curMode !== 'wire');
+  p.wire.visible  = p.visible && (curMode !== 'solid');
+  const visEl = document.querySelector(`.part-vis[data-idx="${idx}"]`);
+  if(visEl){
+    visEl.textContent = p.visible ? '👁' : '🚫';
+    visEl.classList.toggle('hidden', !p.visible);
+  }
+}
+
+function setAllVisible(v){
+  partMeshes.forEach((p,i)=>{
+    p.visible = v;
+    p.solid.visible = v && (curMode !== 'wire');
+    p.wire.visible  = v && (curMode !== 'solid');
+    const visEl = document.querySelector(`.part-vis[data-idx="${i}"]`);
+    if(visEl){
+      visEl.textContent = v ? '👁' : '🚫';
+      visEl.classList.toggle('hidden', !v);
+    }
+  });
+}
+
+// ================================================================
+// MODE & MATERIAL
+// ================================================================
+function applyMode(m){
+  curMode = m;
+  ['solid','wire','both'].forEach(k=>
+    document.getElementById('m-'+k).classList.toggle('active',k===m)
+  );
+  partMeshes.forEach(p=>{
+    if(!p.visible){ p.solid.visible=false; p.wire.visible=false; return; }
+    p.solid.visible = m !== 'wire';
+    p.wire.visible  = m !== 'solid';
+  });
+}
+function setMode(m){ applyMode(m); }
+
+function setMat(type){
+  curMat = type;
+  ['normal','metal','glass'].forEach(k=>
+    document.getElementById('mat-'+k).classList.toggle('active',k===type)
+  );
+  partMeshes.forEach(p=>{
+    p.solid.material = makeMat(p.color, type);
+  });
+}
+
+function setColor(hex, el){
+  curColor = hex;
+  document.querySelectorAll('.swatch').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  // 選択中パーツのみ or 全パーツ
+  if(selectedPart !== null){
+    const p = partMeshes[selectedPart];
+    if(p){ p.color.setHex(hex); p.solid.material=makeMat(p.color,curMat); buildPartsList(); }
+  } else {
+    partMeshes.forEach(p=>{ p.color.setHex(hex); p.solid.material=makeMat(p.color,curMat); });
+  }
+}
+
+// ================================================================
+// CLIPPING — X / Y / Z 軸それぞれ
+// ================================================================
+let clipBounds = null;
+
+function setClipAxis(axis){
+  activeClipAxis = axis;
+  updateClipTabs();
+  if(axis==='off'){
+    renderer.clippingPlanes = [];
+    document.getElementById('clip-val').textContent='OFF';
+    // 全マテリアルのclippingPlanesを空に
+    partMeshes.forEach(p=>{ if(p.solid.material) p.solid.material.clippingPlanes=[]; });
+    return;
+  }
+  applyClip(parseFloat(document.getElementById('clip-range').value));
+}
+
+function updateClipTabs(){
+  ['x','y','z','off'].forEach(a=>{
+    const el=document.getElementById('clip-'+a+'-tab');
+    if(el) el.classList.toggle('active', a===activeClipAxis);
+  });
+}
+
+function applyClip(t){
+  if(!modelGroup) return;
+  const box = new THREE.Box3().setFromObject(modelGroup);
+  const sz = new THREE.Vector3(); box.getSize(sz);
+  const ct = new THREE.Vector3(); box.getCenter(ct);
+  const axis = activeClipAxis;
+  if(axis==='off') return;
+
+  const normals = {x:new THREE.Vector3(-1,0,0), y:new THREE.Vector3(0,-1,0), z:new THREE.Vector3(0,0,-1)};
+  const sizes   = {x:sz.x, y:sz.y, z:sz.z};
+  const centers = {x:ct.x, y:ct.y, z:ct.z};
+  const constant = centers[axis] + t * (sizes[axis]/2);
+  clipPlanes[axis].normal.copy(normals[axis]);
+  clipPlanes[axis].constant = constant;
+
+  const pct = Math.round((t+1)/2*100);
+  document.getElementById('clip-val').textContent = pct+'%';
+
+  // 全マテリアルに適用
+  partMeshes.forEach(p=>{ if(p.solid.material) p.solid.material.clippingPlanes=[clipPlanes[axis]]; });
+  renderer.clippingPlanes = [];
+}
+
+document.getElementById('clip-range').addEventListener('input', e=>{
+  if(activeClipAxis!=='off') applyClip(parseFloat(e.target.value));
+});
+
+// ================================================================
+// EXPLODE VIEW
+// ================================================================
+document.getElementById('explode-range').addEventListener('input', e=>{
+  if(!modelGroup) return;
+  const factor = parseFloat(e.target.value);
+  document.getElementById('explode-val').textContent = factor.toFixed(2);
+  const box = new THREE.Box3().setFromObject(modelGroup);
+  const center = new THREE.Vector3(); box.getCenter(center);
+  partMeshes.forEach(p=>{
+    const orig = p.origPos;
+    const dir  = orig.clone().sub(center).normalize();
+    if(dir.length()<0.001) dir.set(0,1,0);
+    const newPos = orig.clone().addScaledVector(dir, factor * 80);
+    p.solid.position.copy(newPos);
+    p.wire.position.copy(newPos);
+  });
+});
+
+// ================================================================
+// MEASURE — 3D空間に線と距離ラベルを表示
+// ================================================================
+let measurePoints   = [];
+let measureDots     = [];
+let measureLine     = null;
+const raycaster     = new THREE.Raycaster();
+const mouseVec      = new THREE.Vector2();
+
+renderer.domElement.addEventListener('pointerdown', e=>{
+  if(e.button!==0 || e.ctrlKey || e.metaKey) return;
+  // OrbitControlsが動いているときは無視（小さい移動は計測と判断）
+  _pointerDownPos = {x:e.clientX, y:e.clientY};
+});
+renderer.domElement.addEventListener('pointerup', e=>{
+  if(e.button!==0) return;
+  if(!_pointerDownPos) return;
+  const dx=e.clientX-_pointerDownPos.x, dy=e.clientY-_pointerDownPos.y;
+  if(Math.hypot(dx,dy)>5) return; // ドラッグは無視
+  onMeasureClick(e);
+});
+let _pointerDownPos = null;
+
+function onMeasureClick(e){
+  if(!modelGroup) return;
+  mouseVec.x =  (e.clientX/innerWidth)*2-1;
+  mouseVec.y = -(e.clientY/innerHeight)*2+1;
+  raycaster.setFromCamera(mouseVec, camera);
+  const hits = raycaster.intersectObjects(partMeshes.map(p=>p.solid).filter(m=>m.visible), true);
+  if(!hits.length) return;
+
+  const pt = hits[0].point.clone();
+  measurePoints.push(pt);
+
+  // 赤い球を表示
+  const dot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.8, 12,12),
+    new THREE.MeshBasicMaterial({color:0xff3333, depthTest:false})
+  );
+  dot.position.copy(pt);
+  dot.renderOrder=999;
+  scene.add(dot);
+  measureDots.push(dot);
+
+  if(measurePoints.length===2){
+    // 2点間の線を描画
+    if(measureLine){ scene.remove(measureLine); }
+    const pts = [measurePoints[0], measurePoints[1]];
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
+    measureLine = new THREE.Line(lineGeo,
+      new THREE.LineBasicMaterial({color:0xff3333, linewidth:2, depthTest:false})
+    );
+    measureLine.renderOrder=999;
+    scene.add(measureLine);
+
+    const dist = measurePoints[0].distanceTo(measurePoints[1]);
+    document.getElementById('measure-out').innerHTML =
+      `<span style="font-size:16px;font-weight:700;color:#fff">${dist.toFixed(2)} mm</span>`;
+    showMeasureLabel(dist);
+
+  } else if(measurePoints.length>2){
+    clearMeasure();
+  }
+}
+
+function showMeasureLabel(dist){
+  if(measurePoints.length<2) return;
+  const mid = measurePoints[0].clone().lerp(measurePoints[1],0.5);
+  _measureMidWorld = mid;
+  _measureDist     = dist;
+}
+let _measureMidWorld = null, _measureDist = null;
+
+function updateMeasureLabelPos(){
+  if(!_measureMidWorld){ document.getElementById('measure-label').style.display='none'; return; }
+  const v = _measureMidWorld.clone().project(camera);
+  const x = (v.x*.5+.5)*innerWidth;
+  const y = (-v.y*.5+.5)*innerHeight;
+  const el = document.getElementById('measure-label');
+  el.style.display='block';
+  el.style.left = x+'px';
+  el.style.top  = (y-28)+'px';
+  el.textContent = _measureDist?.toFixed(2)+' mm';
+}
+
+function clearMeasure(){
+  measurePoints=[];
+  measureDots.forEach(d=>scene.remove(d)); measureDots=[];
+  if(measureLine){ scene.remove(measureLine); measureLine=null; }
+  document.getElementById('measure-out').textContent='モデル上の2点をクリック';
+  document.getElementById('measure-label').style.display='none';
+  _measureMidWorld=null; _measureDist=null;
+}
+
+// ================================================================
+// CAMERA / VIEW
+// ================================================================
+function fitCamera(){
+  if(!modelGroup) return;
+  const box = new THREE.Box3().setFromObject(modelGroup);
+  const center= new THREE.Vector3(); box.getCenter(center);
+  const size  = new THREE.Vector3(); box.getSize(size);
+  const dist  = Math.max(size.x,size.y,size.z)*1.8;
+  camera.position.set(center.x+dist, center.y+dist*.7, center.z+dist);
+  controls.target.copy(center);
+  gridHelper.position.y = box.min.y - size.y*0.01;
+  controls.update();
+}
+
+function resetView(){ fitCamera(); }
+
+function setView(v){
+  if(!modelGroup) return;
+  const box    = new THREE.Box3().setFromObject(modelGroup);
+  const center = new THREE.Vector3(); box.getCenter(center);
+  const size   = new THREE.Vector3(); box.getSize(size);
+  const d      = Math.max(size.x,size.y,size.z)*2;
+  controls.target.copy(center);
+  const o = center.clone();
+  if(v==='front') camera.position.set(o.x,  o.y,  o.z+d);
+  if(v==='top')   camera.position.set(o.x,  o.y+d,o.z+0.01);
+  if(v==='side')  camera.position.set(o.x+d,o.y,  o.z);
+  if(v==='iso')   camera.position.set(o.x+d*.7,o.y+d*.7,o.z+d*.7);
+  camera.lookAt(o);
+  controls.update();
+}
+
+function toggleAutoRot(){
+  autoRot=!autoRot;
+  document.getElementById('btn-rot').classList.toggle('active',autoRot);
+}
+
+function toggleInfo(){
+  infoVisible=!infoVisible;
+  document.getElementById('info-ov').style.display=infoVisible?'block':'none';
+  document.getElementById('btn-info').classList.toggle('active',infoVisible);
+}
+
+function screenshot(){
+  renderer.render(scene,camera);
+  const link=document.createElement('a');
+  link.download='cad_screenshot.png';
+  link.href=renderer.domElement.toDataURL();
+  link.click();
+}
+
+// ================================================================
+// MODEL INFO
+// ================================================================
+function updateModelInfo(){
+  if(!modelGroup) return;
+  const box=new THREE.Box3().setFromObject(modelGroup);
+  const sz=new THREE.Vector3(); box.getSize(sz);
+  const tris=partMeshes.reduce((s,p)=>{
+    const idx=p.solid.geometry.index;
+    return s+(idx?idx.count/3:p.solid.geometry.attributes.position.count/3);
+  },0);
+  document.getElementById('i-mesh').textContent=partMeshes.length;
+  document.getElementById('i-tris').textContent=Math.round(tris).toLocaleString();
+  document.getElementById('i-x').textContent=sz.x.toFixed(2)+' mm';
+  document.getElementById('i-y').textContent=sz.y.toFixed(2)+' mm';
+  document.getElementById('i-z').textContent=sz.z.toFixed(2)+' mm';
+}
+
+// ================================================================
+// STATUS
+// ================================================================
+function setStatus(type,msg){
+  const d=document.getElementById('status-dot');
+  d.className='';
+  if(type==='loading') d.classList.add('loading');
+  else if(type==='error') d.classList.add('error');
+  d.style.background={ready:'#2ecc71',loading:'#00d4ff',error:'#e74c3c',muted:'#6b7a90'}[type]||'#6b7a90';
+  document.getElementById('status-txt').textContent=msg;
+}
+function showLoading(on, txt='', sub=''){
+  document.getElementById('loading-ov').classList.toggle('show',on);
+  if(txt) document.getElementById('ld-txt').textContent=txt;
+  if(sub) document.getElementById('ld-sub').textContent=sub;
+}
+
+// ================================================================
+// AXIS INDICATOR
+// ================================================================
+const axC=document.getElementById('axis-canvas');
+const axCtx=axC.getContext('2d');
+function drawAxis(){
+  axCtx.clearRect(0,0,80,80);
+  const cx=40,cy=40,len=28;
+  const q=camera.quaternion.clone().invert();
+  [{v:new THREE.Vector3(1,0,0),c:'#f85149',l:'X'},
+   {v:new THREE.Vector3(0,1,0),c:'#2ecc71',l:'Y'},
+   {v:new THREE.Vector3(0,0,1),c:'#3d8ef8',l:'Z'}]
+  .map(a=>{
+    const vt=a.v.clone().applyQuaternion(q);
+    return{x:cx+vt.x*len,y:cy-vt.y*len,c:a.c,l:a.l,z:vt.z};
+  })
+  .sort((a,b)=>a.z-b.z)
+  .forEach(a=>{
+    axCtx.beginPath();axCtx.moveTo(cx,cy);axCtx.lineTo(a.x,a.y);
+    axCtx.strokeStyle=a.c;axCtx.lineWidth=2.5;axCtx.stroke();
+    axCtx.fillStyle=a.c;axCtx.font='bold 11px sans-serif';
+    axCtx.textAlign='center';axCtx.textBaseline='middle';
+    axCtx.fillText(a.l,a.x+(a.x-cx)*.3,a.y+(a.y-cy)*.3);
+  });
+}
+
+// ================================================================
+// RENDER LOOP
+// ================================================================
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update(); // dampingに必要
+  if(autoRot && modelGroup) modelGroup.rotation.y+=0.005;
+  updateMeasureLabelPos();
+  renderer.render(scene,camera);
+  drawAxis();
+}
+animate();
+</script>
+</body>
+</html>
