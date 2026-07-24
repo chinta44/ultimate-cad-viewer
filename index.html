@@ -145,7 +145,7 @@ input[type=range]::-webkit-slider-thumb{
   position:fixed;top:14px;right:14px;
   background:var(--panel);border:1px solid var(--border);
   border-radius:10px;padding:10px 13px;min-width:160px;
-  font-size:11px;display:none;z-index:90;backdrop-filter:blur(16px);
+  font-size:11px;display:block;z-index:90;backdrop-filter:blur(16px);
 }
 .info-row{display:flex;justify-content:space-between;gap:12px;padding:2px 0;}
 .info-l{color:var(--muted);}
@@ -165,6 +165,15 @@ input[type=range]::-webkit-slider-thumb{
 .swatch:hover{transform:scale(1.2);}
 .swatch.active{border-color:#fff;}
 
+/* drag & drop overlay */
+#drop-overlay{
+  position:fixed;inset:10px;border:3px dashed var(--accent);border-radius:16px;
+  display:none;align-items:center;justify-content:center;
+  font-size:20px;font-weight:700;color:var(--accent);
+  background:rgba(0,212,255,.07);z-index:400;pointer-events:none;
+}
+body.dragging #drop-overlay{display:flex;}
+
 /* mobile */
 @media(max-width:600px){
   #sidebar{width:100%;height:50%;top:auto;bottom:0;border-right:none;border-top:1px solid var(--border);}
@@ -178,6 +187,9 @@ input[type=range]::-webkit-slider-thumb{
 
 <!-- 3D measure label -->
 <div class="measure-label-3d" id="measure-label"></div>
+
+<!-- Drag & drop overlay -->
+<div id="drop-overlay">📂 ここにファイルをドロップして読み込む</div>
 
 <!-- Loading overlay -->
 <div id="loading-ov">
@@ -247,6 +259,20 @@ input[type=range]::-webkit-slider-thumb{
         <div class="swatch" style="background:#e74c3c"        onclick="setColor(0xe74c3c,this)"></div>
         <div class="swatch" style="background:#9b59b6"        onclick="setColor(0x9b59b6,this)"></div>
         <div class="swatch" style="background:#ffffff"        onclick="setColor(0xffffff,this)"></div>
+      </div>
+    </div>
+
+    <!-- Background color -->
+    <div class="sec">
+      <div class="sec-title">背景色</div>
+      <div class="swatch-row" id="bg-swatch-row">
+        <div class="swatch active" data-color="0x0d0f14" style="background:#0d0f14" onclick="setBgColor(0x0d0f14,this)"></div>
+        <div class="swatch" data-color="0x000000" style="background:#000000" onclick="setBgColor(0x000000,this)"></div>
+        <div class="swatch" data-color="0x1a2332" style="background:#1a2332" onclick="setBgColor(0x1a2332,this)"></div>
+        <div class="swatch" data-color="0xe4eaf4" style="background:#e4eaf4" onclick="setBgColor(0xe4eaf4,this)"></div>
+        <div class="swatch" data-color="0xffffff" style="background:#ffffff" onclick="setBgColor(0xffffff,this)"></div>
+        <input type="color" id="bg-custom" value="#0d0f14" title="カスタム背景色"
+          style="width:22px;height:22px;padding:0;border:2px solid transparent;border-radius:50%;overflow:hidden;cursor:pointer;background:none;">
       </div>
     </div>
 
@@ -337,7 +363,7 @@ input[type=range]::-webkit-slider-thumb{
         <button class="btn" onclick="resetView()">🏠 リセット</button>
         <button class="btn" id="btn-rot" onclick="toggleAutoRot()">⟳ 回転</button>
       </div>
-      <button class="btn" id="btn-info" onclick="toggleInfo()">ℹ モデル情報</button>
+      <button class="btn active" id="btn-info" onclick="toggleInfo()">ℹ モデル情報</button>
       <button class="btn" onclick="screenshot()">📷 スクリーンショット</button>
     </div>
   </div>
@@ -425,13 +451,14 @@ let curMode    = 'solid';
 let curMat     = 'normal';
 let curColor   = 0xff7b2c;
 let autoRot    = false;
-let infoVisible= false;
+let infoVisible= true;
 let occtInst   = null;
 let selectedPart = null;
 let lastDeleted  = null;   // Undo用に直前に削除した1パーツ分の情報を保持
 let compareModeActive = false; // 比較用ファイルの読み込み中はtrue（addPartの着色を上書き）
 let curDensity = 1.24;     // g/cm³ (PLA既定)
 let pricePerKg = 3000;     // 円/kg
+let curBgColor = 0x0d0f14; // 背景色
 
 // ================================================================
 // 設定の記憶（localStorage）
@@ -440,7 +467,7 @@ const SETTINGS_KEY = 'ultimateCadViewerSettings_v1';
 function saveSettings(){
   try{
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg
+      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor
     }));
   }catch(e){ /* localStorageが使えない環境では無視 */ }
 }
@@ -453,6 +480,7 @@ function loadSettings(){
     if(s.mat) curMat = s.mat;
     if(typeof s.density==='number') curDensity = s.density;
     if(typeof s.price==='number') pricePerKg = s.price;
+    if(typeof s.bg==='number') curBgColor = s.bg;
   }catch(e){ /* 無視 */ }
 }
 loadSettings();
@@ -471,6 +499,11 @@ document.querySelectorAll('#density-row .btn').forEach(b=>{
   b.classList.toggle('active', parseFloat(b.dataset.density)===curDensity);
 });
 document.getElementById('price-per-kg').value = pricePerKg;
+scene.background = new THREE.Color(curBgColor);
+document.getElementById('bg-custom').value = '#'+new THREE.Color(curBgColor).getHexString();
+document.querySelectorAll('#bg-swatch-row .swatch').forEach(s=>{
+  s.classList.toggle('active', parseInt(s.dataset.color,16)===curBgColor);
+});
 
 // Clipping planes
 const clipPlanes = {
@@ -766,6 +799,30 @@ function buildMeshFromObject(){ }              // unused
 document.getElementById('file-in').addEventListener('change', e=>{
   if(e.target.files[0]) loadFile(e.target.files[0]);
   e.target.value='';
+});
+
+// ================================================================
+// DRAG & DROP
+// ================================================================
+let dragCounter = 0;
+window.addEventListener('dragenter', e=>{
+  e.preventDefault();
+  if(!e.dataTransfer.types || !e.dataTransfer.types.includes('Files')) return;
+  dragCounter++;
+  document.body.classList.add('dragging');
+});
+window.addEventListener('dragover', e=>{ e.preventDefault(); });
+window.addEventListener('dragleave', e=>{
+  e.preventDefault();
+  dragCounter = Math.max(0, dragCounter-1);
+  if(dragCounter===0) document.body.classList.remove('dragging');
+});
+window.addEventListener('drop', e=>{
+  e.preventDefault();
+  dragCounter = 0;
+  document.body.classList.remove('dragging');
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(file) loadFile(file);
 });
 
 async function loadFile(file){
@@ -1221,6 +1278,19 @@ function setMat(type){
   });
   saveSettings();
 }
+
+function setBgColor(hex, el){
+  curBgColor = hex;
+  scene.background = new THREE.Color(hex);
+  document.querySelectorAll('#bg-swatch-row .swatch').forEach(s=>s.classList.remove('active'));
+  if(el) el.classList.add('active');
+  document.getElementById('bg-custom').value = '#'+new THREE.Color(hex).getHexString();
+  saveSettings();
+}
+document.getElementById('bg-custom').addEventListener('input', e=>{
+  const hex = parseInt(e.target.value.replace('#',''), 16);
+  setBgColor(hex, null);
+});
 
 function setColor(hex, el){
   curColor = hex;
