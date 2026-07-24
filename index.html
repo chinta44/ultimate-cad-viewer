@@ -60,6 +60,7 @@ body{overflow:hidden;background:var(--bg);font-family:'Segoe UI',system-ui,sans-
 .btn.active{background:var(--accent);border-color:var(--accent);color:#000;}
 .btn.danger{color:var(--red);border-color:rgba(231,76,60,.3);}
 .btn.danger:hover{background:rgba(231,76,60,.15);}
+.btn[disabled]{opacity:.35;pointer-events:none;}
 .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;}
 .btn-row .btn{margin-bottom:0;}
 .btn-row3{grid-template-columns:1fr 1fr 1fr;}
@@ -104,6 +105,8 @@ input[type=range]::-webkit-slider-thumb{
 .part-vis{cursor:pointer;color:var(--muted);font-size:13px;flex-shrink:0;transition:color .12s;}
 .part-vis:hover{color:var(--text);}
 .part-vis.hidden{color:var(--red);}
+.part-del{cursor:pointer;color:var(--muted);font-size:13px;flex-shrink:0;transition:color .12s;}
+.part-del:hover{color:var(--red);}
 
 /* status bar */
 #statusbar{
@@ -147,6 +150,7 @@ input[type=range]::-webkit-slider-thumb{
 .info-row{display:flex;justify-content:space-between;gap:12px;padding:2px 0;}
 .info-l{color:var(--muted);}
 .info-v{color:var(--accent);font-weight:700;}
+#i-fname{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;}
 
 /* clip axis tabs */
 .tab-row{display:flex;gap:3px;margin-bottom:6px;}
@@ -184,6 +188,7 @@ input[type=range]::-webkit-slider-thumb{
 
 <!-- Info overlay -->
 <div id="info-ov">
+  <div class="info-row"><span class="info-l">ファイル名</span><span class="info-v" id="i-fname" title="">—</span></div>
   <div class="info-row"><span class="info-l">メッシュ数</span><span class="info-v" id="i-mesh">—</span></div>
   <div class="info-row"><span class="info-l">三角形数</span><span class="info-v" id="i-tris">—</span></div>
   <div class="info-row"><span class="info-l">X幅</span><span class="info-v" id="i-x">—</span></div>
@@ -201,14 +206,14 @@ input[type=range]::-webkit-slider-thumb{
 <!-- SIDEBAR -->
 <div id="sidebar">
   <div id="sidebar-header">
-    <h1>◈ ULTIMATE CAD VIEWER</h1>
-    <p>STEP / STL / 3MF — プロフェッショナル3Dビューア</p>
+    <h1>◈ ULTIMATE CAD VIEWER <span id="app-version" style="color:var(--muted);font-weight:600;"></span></h1>
+    <p>STEP / STL / 3MF / OBJ / ZIP — プロフェッショナル3Dビューア</p>
   </div>
 
   <div id="sidebar-body">
     <!-- Open -->
     <label id="open-btn" for="file-in">📂 ファイルを開く</label>
-    <input type="file" id="file-in" accept=".step,.stp,.stl,.3mf,.zip" style="display:none">
+    <input type="file" id="file-in" accept=".step,.stp,.stl,.3mf,.obj,.zip" style="display:none">
 
     <!-- View mode -->
     <div class="sec">
@@ -284,6 +289,39 @@ input[type=range]::-webkit-slider-thumb{
         <button class="btn" onclick="setAllVisible(true)">👁 全表示</button>
         <button class="btn" onclick="setAllVisible(false)">🚫 全非表示</button>
       </div>
+      <button class="btn" id="btn-undo" onclick="undoDelete()" disabled>↩ 削除を元に戻す</button>
+    </div>
+
+    <!-- Volume / Weight / Cost -->
+    <div class="sec">
+      <div class="sec-title">体積・重量・材料費 概算</div>
+      <div class="btn-row btn-row3" id="density-row">
+        <button class="btn active" data-density="1.24" onclick="setDensity(1.24,this)">PLA</button>
+        <button class="btn"        data-density="1.27" onclick="setDensity(1.27,this)">PETG</button>
+        <button class="btn"        data-density="1.04" onclick="setDensity(1.04,this)">ABS</button>
+      </div>
+      <div class="slider-wrap">
+        <div class="slider-label"><span>価格 (円/kg)</span></div>
+        <input type="number" id="price-per-kg" value="3000" min="0" step="100"
+          style="width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:11px;font-family:inherit;">
+      </div>
+      <div class="info-row"><span class="info-l">体積</span><span class="info-v" id="w-vol">—</span></div>
+      <div class="info-row"><span class="info-l">推定重量</span><span class="info-v" id="w-weight">—</span></div>
+      <div class="info-row"><span class="info-l">推定材料費</span><span class="info-v" id="w-cost">—</span></div>
+    </div>
+
+    <!-- Compare mode -->
+    <div class="sec">
+      <div class="sec-title">2ファイル比較モード</div>
+      <label id="open-btn" for="compare-file-in" style="background:rgba(255,255,255,.08);color:var(--text);">🔍 比較用ファイルを追加</label>
+      <input type="file" id="compare-file-in" accept=".step,.stp,.stl,.3mf,.obj,.zip" style="display:none">
+      <div class="btn-row" style="margin-top:6px;">
+        <button class="btn" onclick="alignCompareCenters()">🎯 中心を合わせる</button>
+        <button class="btn danger" onclick="clearCompareParts()">🗑 比較を消す</button>
+      </div>
+      <p style="font-size:9.5px;color:var(--muted);margin-top:4px;line-height:1.4;">
+        追加したファイルは半透明の青色で重ねて表示されます（自動での形状差分検出ではなく、目視比較用です）
+      </p>
     </div>
 
     <!-- View controls -->
@@ -372,8 +410,17 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
+const APP_VERSION = 'v1.6.0';
+// --- 変更履歴 ---
+// v1.6.0: OBJ対応 / 体積・重量・材料費概算 / 削除Undo / 2ファイル比較モード / 設定の記憶
+// v1.5.0: パーツ削除機能、ファイル名表示
+// v1.4.0: 3MFのカラー表示対応（BambuStudioフィラメント色・標準3MF材質）
+// v1.3.0: ZIP内の複数CADファイル一括読み込み対応
+// v1.2.0: 3MF読み込み失敗の修正（fflateライブラリをファイル内に直接埋め込み）
+// v1.1.0: STEP / STL / 3MF 対応
+
 let modelGroup = null;
-let partMeshes = [];      // {mesh, wireMesh, origPos, color, name, visible}
+let partMeshes = [];      // {mesh, wireMesh, origPos, color, name, visible, isCompare}
 let curMode    = 'solid';
 let curMat     = 'normal';
 let curColor   = 0xff7b2c;
@@ -381,6 +428,49 @@ let autoRot    = false;
 let infoVisible= false;
 let occtInst   = null;
 let selectedPart = null;
+let lastDeleted  = null;   // Undo用に直前に削除した1パーツ分の情報を保持
+let compareModeActive = false; // 比較用ファイルの読み込み中はtrue（addPartの着色を上書き）
+let curDensity = 1.24;     // g/cm³ (PLA既定)
+let pricePerKg = 3000;     // 円/kg
+
+// ================================================================
+// 設定の記憶（localStorage）
+// ================================================================
+const SETTINGS_KEY = 'ultimateCadViewerSettings_v1';
+function saveSettings(){
+  try{
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg
+    }));
+  }catch(e){ /* localStorageが使えない環境では無視 */ }
+}
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    if(s.mode) curMode = s.mode;
+    if(s.mat) curMat = s.mat;
+    if(typeof s.density==='number') curDensity = s.density;
+    if(typeof s.price==='number') pricePerKg = s.price;
+  }catch(e){ /* 無視 */ }
+}
+loadSettings();
+
+// バージョン表示
+document.getElementById('app-version').textContent = APP_VERSION;
+
+// 保存済み設定をUIに反映
+['solid','wire','both'].forEach(k=>
+  document.getElementById('m-'+k).classList.toggle('active', k===curMode)
+);
+['normal','metal','glass'].forEach(k=>
+  document.getElementById('mat-'+k).classList.toggle('active', k===curMat)
+);
+document.querySelectorAll('#density-row .btn').forEach(b=>{
+  b.classList.toggle('active', parseFloat(b.dataset.density)===curDensity);
+});
+document.getElementById('price-per-kg').value = pricePerKg;
 
 // Clipping planes
 const clipPlanes = {
@@ -683,16 +773,23 @@ async function loadFile(file){
   const isSTEP = ext.endsWith('.step')||ext.endsWith('.stp');
   const isSTL  = ext.endsWith('.stl');
   const is3MF  = ext.endsWith('.3mf');
+  const isOBJ  = ext.endsWith('.obj');
   const isZIP  = ext.endsWith('.zip');
-  if(!isSTEP&&!isSTL&&!is3MF&&!isZIP){ setStatus('error','❌ .step/.stp/.stl/.3mf/.zip のみ対応'); return; }
+  if(!isSTEP&&!isSTL&&!is3MF&&!isOBJ&&!isZIP){ setStatus('error','❌ .step/.stp/.stl/.3mf/.obj/.zip のみ対応'); return; }
 
   setStatus('loading',`読み込み中: ${file.name}`);
   showLoading(true,'ファイルを解析中...', file.name+' ('+Math.round(file.size/1024)+' KB)');
+  const fnameEl = document.getElementById('i-fname');
+  fnameEl.textContent = file.name;
+  fnameEl.title = file.name;
+  document.title = file.name + ' – ULTIMATE CAD VIEWER';
 
   // 既存モデルをクリア
   if(modelGroup){ scene.remove(modelGroup); }
   modelGroup = new THREE.Group();
   partMeshes = [];
+  lastDeleted = null;
+  document.getElementById('btn-undo').disabled = true;
   clearMeasure();
   document.getElementById('explode-range').value=0;
   document.getElementById('clip-range').value=1;
@@ -708,10 +805,10 @@ async function loadFile(file){
       const entries = Object.keys(zipFiles).filter(name=>{
         if(name.endsWith('/')) return false; // フォルダ
         const n = name.toLowerCase();
-        return n.endsWith('.step')||n.endsWith('.stp')||n.endsWith('.stl')||n.endsWith('.3mf');
+        return n.endsWith('.step')||n.endsWith('.stp')||n.endsWith('.stl')||n.endsWith('.3mf')||n.endsWith('.obj');
       }).sort();
 
-      if(entries.length === 0) throw new Error('ZIP内にSTEP/STL/3MFファイルが見つかりません');
+      if(entries.length === 0) throw new Error('ZIP内にSTEP/STL/3MF/OBJファイルが見つかりません');
 
       const errors = [];
       for(let i=0;i<entries.length;i++){
@@ -749,6 +846,12 @@ async function loadFile(file){
       document.getElementById('ld-txt').textContent='3MFを解析中...';
       await parse3MF(buffer);
       document.getElementById('i-fmt').textContent='3MF';
+
+    } else if(isOBJ) {
+      document.getElementById('ld-txt').textContent='OBJを解析中...';
+      const text = new TextDecoder().decode(buffer);
+      loadOBJText(text, file.name);
+      document.getElementById('i-fmt').textContent='OBJ';
     }
 
     scene.add(modelGroup);
@@ -779,6 +882,9 @@ async function loadSingleCad(entryName, bytes){
   } else if(n.endsWith('.3mf')){
     const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset+bytes.byteLength);
     await parse3MF(ab, baseName);
+  } else if(n.endsWith('.obj')){
+    const text = new TextDecoder().decode(bytes);
+    loadOBJText(text, baseName);
   }
 }
 
@@ -805,9 +911,166 @@ function loadSTLBuffer(arrayBuffer, sourceName){
   addPart(geo, new THREE.Color(curColor), sourceName);
 }
 
+// OBJテキストからパーツを生成（vtやvn、マテリアルファイルは無視し形状のみ読み込み）
+// 頂点はグローバル配列で共有される仕様のため、パーツごとに再インデックスせず
+// 三角形の各頂点座標をそのままフラットな非インデックスジオメトリとして構築する
+function loadOBJText(text, sourceName){
+  const lines = text.split(/\r\n|\r|\n/);
+  const positions = [];
+  const parts = [];
+  let curName = null;
+  let curFaces = [];
+  function flushPart(){
+    if(curFaces.length) parts.push({name: curName, verts: curFaces});
+    curFaces = [];
+  }
+  function getVertex(idxStr){
+    let idx = parseInt(idxStr);
+    if(idx < 0) idx = positions.length/3 + idx + 1; // 相対（負）インデックス対応
+    return idx - 1;
+  }
+  for(const raw of lines){
+    const line = raw.trim();
+    if(!line || line[0]==='#') continue;
+    if(line.startsWith('v ')){
+      const p = line.slice(2).trim().split(/\s+/).map(parseFloat);
+      positions.push(p[0], p[1], p[2]);
+    } else if(line.startsWith('o ') || line.startsWith('g ')){
+      flushPart();
+      curName = line.slice(2).trim() || null;
+    } else if(line.startsWith('f ')){
+      const toks = line.slice(2).trim().split(/\s+/).map(t=>t.split('/')[0]).map(getVertex);
+      for(let i=1;i<toks.length-1;i++) curFaces.push(toks[0], toks[i], toks[i+1]); // ポリゴンをファン三角形分割
+    }
+  }
+  flushPart();
+  if(!parts.length) throw new Error('OBJファイルに読み込み可能なジオメトリ（f行）が見つかりません');
+
+  parts.forEach((part, i)=>{
+    const arr = new Float32Array(part.verts.length * 3);
+    part.verts.forEach((vIdx, j)=>{
+      arr[j*3]   = positions[vIdx*3];
+      arr[j*3+1] = positions[vIdx*3+1];
+      arr[j*3+2] = positions[vIdx*3+2];
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+    geo.computeVertexNormals();
+    const hue = (partMeshes.length * 137.5) % 360;
+    const col = new THREE.Color().setHSL(hue/360, 0.65, 0.55);
+    const label = parts.length > 1 ? `${sourceName} - ${part.name || ('Part_'+(i+1))}` : sourceName;
+    addPart(geo, col, label);
+  });
+}
+
+// ================================================================
+// 2ファイル比較モード
+// ================================================================
+document.getElementById('compare-file-in').addEventListener('change', e=>{
+  if(e.target.files[0]) loadCompareFile(e.target.files[0]);
+  e.target.value='';
+});
+
+async function loadCompareFile(file){
+  const ext = file.name.toLowerCase();
+  const isSTEP = ext.endsWith('.step')||ext.endsWith('.stp');
+  const isSTL  = ext.endsWith('.stl');
+  const is3MF  = ext.endsWith('.3mf');
+  const isOBJ  = ext.endsWith('.obj');
+  const isZIP  = ext.endsWith('.zip');
+  if(!isSTEP&&!isSTL&&!is3MF&&!isOBJ&&!isZIP){ setStatus('error','❌ .step/.stp/.stl/.3mf/.obj/.zip のみ対応'); return; }
+
+  if(!modelGroup){ modelGroup = new THREE.Group(); scene.add(modelGroup); }
+
+  setStatus('loading',`比較ファイル読み込み中: ${file.name}`);
+  showLoading(true,'比較用ファイルを解析中...', file.name);
+  compareModeActive = true;
+
+  try{
+    const buffer = await file.arrayBuffer();
+
+    if(isZIP){
+      const zipFiles = fflate.unzipSync(new Uint8Array(buffer));
+      const entries = Object.keys(zipFiles).filter(name=>{
+        if(name.endsWith('/')) return false;
+        const n = name.toLowerCase();
+        return n.endsWith('.step')||n.endsWith('.stp')||n.endsWith('.stl')||n.endsWith('.3mf')||n.endsWith('.obj');
+      }).sort();
+      if(entries.length === 0) throw new Error('ZIP内にSTEP/STL/3MF/OBJファイルが見つかりません');
+      for(const entryName of entries){
+        try{ await loadSingleCad(entryName, zipFiles[entryName]); }
+        catch(err){ console.error('比較ZIP内ファイルの読み込み失敗:', entryName, err); }
+      }
+    } else if(isSTEP){
+      if(!occtInst) occtInst = await occtimportjs();
+      loadSTEPBuffer(new Uint8Array(buffer), file.name);
+    } else if(isSTL){
+      loadSTLBuffer(buffer, file.name);
+    } else if(is3MF){
+      await parse3MF(buffer, file.name);
+    } else if(isOBJ){
+      const text = new TextDecoder().decode(buffer);
+      loadOBJText(text, file.name);
+    }
+
+    fitCamera();
+    buildPartsList();
+    updateModelInfo();
+    applyMode(curMode);
+    setStatus('ready','✅ 比較ファイルの読み込み完了');
+
+  } catch(err){
+    console.error(err);
+    setStatus('error','❌ 比較ファイルの読み込み失敗: '+(err.message||'不明なエラー'));
+  } finally {
+    showLoading(false);
+    compareModeActive = false;
+  }
+}
+
+function clearCompareParts(){
+  const keep = [];
+  partMeshes.forEach(p=>{
+    if(p.isCompare){
+      modelGroup.remove(p.solid, p.wire);
+      p.solid.geometry.dispose();
+      p.solid.material.dispose();
+      p.wire.material.dispose();
+    } else {
+      keep.push(p);
+    }
+  });
+  partMeshes = keep;
+  buildPartsList();
+  updateModelInfo();
+}
+
+function alignCompareCenters(){
+  const partsA = partMeshes.filter(p=>!p.isCompare);
+  const partsB = partMeshes.filter(p=>p.isCompare);
+  if(!partsA.length || !partsB.length) return;
+  const boxA = new THREE.Box3(); partsA.forEach(p=>boxA.expandByObject(p.solid));
+  const boxB = new THREE.Box3(); partsB.forEach(p=>boxB.expandByObject(p.solid));
+  const centerA = new THREE.Vector3(); boxA.getCenter(centerA);
+  const centerB = new THREE.Vector3(); boxB.getCenter(centerB);
+  const delta = centerA.clone().sub(centerB);
+  partsB.forEach(p=>{
+    p.solid.position.add(delta);
+    p.wire.position.add(delta);
+    p.origPos.add(delta);
+  });
+  fitCamera();
+}
+
+const COMPARE_COLOR = 0x3d8ef8;
 function addPart(geo, color, name){
   geo.computeBoundingBox();
-  const solid = new THREE.Mesh(geo, makeMat(color, curMat));
+  const isCompare = compareModeActive;
+  const partColor = isCompare ? new THREE.Color(COMPARE_COLOR) : color;
+  const mat = isCompare
+    ? new THREE.MeshPhongMaterial({color:partColor, transparent:true, opacity:0.35, depthWrite:false, side:THREE.DoubleSide})
+    : makeMat(partColor, curMat);
+  const solid = new THREE.Mesh(geo, mat);
   const wire  = new THREE.Mesh(geo, makeWireMat());
   wire.visible = (curMode !== 'solid');
   solid.castShadow = true;
@@ -817,9 +1080,10 @@ function addPart(geo, color, name){
   partMeshes.push({
     solid, wire,
     origPos: solid.position.clone(),
-    color: color.clone(),
-    name,
-    visible: true
+    color: partColor.clone(),
+    name: isCompare ? `[比較] ${name}` : name,
+    visible: true,
+    isCompare
   });
 }
 
@@ -838,6 +1102,7 @@ function buildPartsList(){
       <div class="part-color" style="background:${hex}"></div>
       <span class="part-name" title="${p.name}">${p.name}</span>
       <span class="part-vis" data-idx="${i}" onclick="togglePartVis(${i},event)" title="表示/非表示">👁</span>
+      <span class="part-del" data-idx="${i}" onclick="deletePart(${i},event)" title="このパーツを削除">🗑</span>
     `;
     item.addEventListener('click', ()=> selectPart(i));
     el.appendChild(item);
@@ -874,6 +1139,49 @@ function togglePartVis(idx, e){
   }
 }
 
+function deletePart(idx, e){
+  e.stopPropagation();
+  const p = partMeshes[idx];
+  if(!p) return;
+  if(!confirm(`「${p.name}」を削除しますか？`)) return;
+
+  modelGroup.remove(p.solid, p.wire);
+  partMeshes.splice(idx, 1);
+
+  // Undo用に保持（1回分のみ）。既存のUndoデータがあれば破棄してから上書き
+  if(lastDeleted){
+    lastDeleted.geo.dispose();
+    lastDeleted.matSnapshot && lastDeleted.matSnapshot.dispose && lastDeleted.matSnapshot.dispose();
+  }
+  lastDeleted = { geo: p.solid.geometry, color: p.color.clone(), name: p.name, isCompare: p.isCompare };
+  document.getElementById('btn-undo').disabled = false;
+  p.solid.material.dispose();
+  p.wire.material.dispose();
+
+  if(selectedPart === idx) selectedPart = null;
+  else if(selectedPart != null && selectedPart > idx) selectedPart--;
+
+  buildPartsList();
+  updateModelInfo();
+
+  if(partMeshes.length > 0) fitCamera();
+}
+
+function undoDelete(){
+  if(!lastDeleted) return;
+  const wasCompare = compareModeActive;
+  compareModeActive = lastDeleted.isCompare; // 比較パーツだった場合は同じ見た目で復元
+  // addPartは名前に「[比較]」を自動付与するため、復元時は元の名前から除去して渡す
+  const restoredName = lastDeleted.isCompare ? lastDeleted.name.replace(/^\[比較\] /,'') : lastDeleted.name;
+  addPart(lastDeleted.geo, lastDeleted.color, restoredName);
+  compareModeActive = wasCompare;
+  lastDeleted = null;
+  document.getElementById('btn-undo').disabled = true;
+  buildPartsList();
+  updateModelInfo();
+  fitCamera();
+}
+
 function setAllVisible(v){
   partMeshes.forEach((p,i)=>{
     p.visible = v;
@@ -901,7 +1209,7 @@ function applyMode(m){
     p.wire.visible  = m !== 'solid';
   });
 }
-function setMode(m){ applyMode(m); }
+function setMode(m){ applyMode(m); saveSettings(); }
 
 function setMat(type){
   curMat = type;
@@ -911,6 +1219,7 @@ function setMat(type){
   partMeshes.forEach(p=>{
     p.solid.material = makeMat(p.color, type);
   });
+  saveSettings();
 }
 
 function setColor(hex, el){
@@ -1148,6 +1457,15 @@ function screenshot(){
 // ================================================================
 function updateModelInfo(){
   if(!modelGroup) return;
+  if(partMeshes.length === 0){
+    document.getElementById('i-mesh').textContent='0';
+    document.getElementById('i-tris').textContent='0';
+    document.getElementById('i-x').textContent='—';
+    document.getElementById('i-y').textContent='—';
+    document.getElementById('i-z').textContent='—';
+    updateWeightEstimate();
+    return;
+  }
   const box=new THREE.Box3().setFromObject(modelGroup);
   const sz=new THREE.Vector3(); box.getSize(sz);
   const tris=partMeshes.reduce((s,p)=>{
@@ -1159,7 +1477,56 @@ function updateModelInfo(){
   document.getElementById('i-x').textContent=sz.x.toFixed(2)+' mm';
   document.getElementById('i-y').textContent=sz.y.toFixed(2)+' mm';
   document.getElementById('i-z').textContent=sz.z.toFixed(2)+' mm';
+  updateWeightEstimate();
 }
+
+// ================================================================
+// VOLUME / WEIGHT / COST（符号付き四面体分割による体積計算）
+// ================================================================
+function computeVolumeMM3(geo){
+  const pos = geo.attributes.position.array;
+  const idx = geo.index ? geo.index.array : null;
+  let vol = 0;
+  const vA=new THREE.Vector3(), vB=new THREE.Vector3(), vC=new THREE.Vector3();
+  const count = idx ? idx.length : pos.length/3;
+  for(let i=0;i<count;i+=3){
+    const ia = idx?idx[i]:i, ib = idx?idx[i+1]:i+1, ic = idx?idx[i+2]:i+2;
+    vA.fromArray(pos, ia*3); vB.fromArray(pos, ib*3); vC.fromArray(pos, ic*3);
+    vol += vA.dot(vB.clone().cross(vC)) / 6;
+  }
+  return Math.abs(vol);
+}
+
+function updateWeightEstimate(){
+  const targetParts = partMeshes.filter(p=>!p.isCompare); // 比較用パーツは概算から除外
+  if(!targetParts.length){
+    document.getElementById('w-vol').textContent='—';
+    document.getElementById('w-weight').textContent='—';
+    document.getElementById('w-cost').textContent='—';
+    return;
+  }
+  let totalMM3 = 0;
+  targetParts.forEach(p=>{ totalMM3 += computeVolumeMM3(p.solid.geometry); });
+  const cm3   = totalMM3/1000;
+  const grams = cm3*curDensity;
+  const cost  = (grams/1000)*pricePerKg;
+  document.getElementById('w-vol').textContent    = cm3.toFixed(2)+' cm³';
+  document.getElementById('w-weight').textContent = grams.toFixed(1)+' g';
+  document.getElementById('w-cost').textContent   = '¥'+Math.round(cost).toLocaleString();
+}
+
+function setDensity(d, el){
+  curDensity = d;
+  document.querySelectorAll('#density-row .btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  updateWeightEstimate();
+  saveSettings();
+}
+document.getElementById('price-per-kg').addEventListener('input', e=>{
+  pricePerKg = parseFloat(e.target.value)||0;
+  updateWeightEstimate();
+  saveSettings();
+});
 
 // ================================================================
 // STATUS
