@@ -4587,8 +4587,10 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.7.0';
+const APP_VERSION = 'v1.7.1';
 // --- 変更履歴 ---
+// v1.7.1: GLBのテクスチャ（baseColorTexture等）を単色に潰さず保持するよう修正 /
+//         カラースイッチの「active」判定が背景色スウォッチにも誤って波及していたバグを修正
 // v1.7.0: GLB/glTF対応（埋め込みGLTFLoader、Draco圧縮は非対応）/ ドラッグ&ドロップ読み込み /
 //         モデル情報パネルをデフォルト表示に変更 / 背景色カスタマイズ（プリセット+カラーピッカー）
 // v1.6.0: OBJ対応 / 体積・重量・材料費概算 / 削除Undo / 2ファイル比較モード / 設定の記憶
@@ -4669,22 +4671,22 @@ let activeClipAxis = 'off';
 // ================================================================
 // MATERIAL FACTORY
 // ================================================================
-function makeMat(color, matType){
+function makeMat(color, matType, map){
   const planes = activeClipAxis === 'off' ? [] : [clipPlanes[activeClipAxis]];
   if(matType==='metal'){
     return new THREE.MeshStandardMaterial({
-      color, metalness:0.85, roughness:0.12,
+      color, map:map||null, metalness:0.85, roughness:0.12,
       clippingPlanes:planes, side:THREE.DoubleSide
     });
   }
   if(matType==='glass'){
     return new THREE.MeshPhongMaterial({
-      color, transparent:true, opacity:0.38, shininess:120,
+      color, map:map||null, transparent:true, opacity:0.38, shininess:120,
       clippingPlanes:planes, side:THREE.DoubleSide
     });
   }
   return new THREE.MeshPhysicalMaterial({
-    color, metalness:0.05, roughness:0.5, clearcoat:0.2,
+    color, map:map||null, metalness:0.05, roughness:0.5, clearcoat:0.2,
     clippingPlanes:planes, side:THREE.DoubleSide
   });
 }
@@ -5198,15 +5200,16 @@ function loadGLBBuffer(arrayBuffer, sourceName){
           const geo = node.geometry.clone();
           geo.applyMatrix4(node.matrixWorld);
           if(!geo.attributes.normal) geo.computeVertexNormals();
-          let col;
+          let col, map = null;
           if(node.material && !Array.isArray(node.material) && node.material.color){
             col = node.material.color.clone();
+            if(node.material.map) map = node.material.map; // baseColorTexture等があれば保持し、塗り潰さない
           } else {
             const hue = (partMeshes.length * 137.5) % 360;
             col = new THREE.Color().setHSL(hue/360, 0.65, 0.55);
           }
           const label = meshNodes.length > 1 ? `${sourceName} - ${node.name || ('Part_'+(i+1))}` : sourceName;
-          addPart(geo, col, label);
+          addPart(geo, col, label, map);
         });
         resolve();
       }catch(e){ reject(e); }
@@ -5321,13 +5324,14 @@ function alignCompareCenters(){
 }
 
 const COMPARE_COLOR = 0x3d8ef8;
-function addPart(geo, color, name){
+function addPart(geo, color, name, map){
   geo.computeBoundingBox();
   const isCompare = compareModeActive;
   const partColor = isCompare ? new THREE.Color(COMPARE_COLOR) : color;
+  const partMap = isCompare ? null : (map || null); // 比較パーツは常に単色の半透明表示にするためmapは使わない
   const mat = isCompare
     ? new THREE.MeshPhongMaterial({color:partColor, transparent:true, opacity:0.35, depthWrite:false, side:THREE.DoubleSide})
-    : makeMat(partColor, curMat);
+    : makeMat(partColor, curMat, partMap);
   const solid = new THREE.Mesh(geo, mat);
   const wire  = new THREE.Mesh(geo, makeWireMat());
   wire.visible = (curMode !== 'solid');
@@ -5339,6 +5343,7 @@ function addPart(geo, color, name){
     solid, wire,
     origPos: solid.position.clone(),
     color: partColor.clone(),
+    map: partMap,
     name: isCompare ? `[比較] ${name}` : name,
     visible: true,
     isCompare
@@ -5411,7 +5416,7 @@ function deletePart(idx, e){
     lastDeleted.geo.dispose();
     lastDeleted.matSnapshot && lastDeleted.matSnapshot.dispose && lastDeleted.matSnapshot.dispose();
   }
-  lastDeleted = { geo: p.solid.geometry, color: p.color.clone(), name: p.name, isCompare: p.isCompare };
+  lastDeleted = { geo: p.solid.geometry, color: p.color.clone(), map: p.map, name: p.name, isCompare: p.isCompare };
   document.getElementById('btn-undo').disabled = false;
   p.solid.material.dispose();
   p.wire.material.dispose();
@@ -5431,7 +5436,7 @@ function undoDelete(){
   compareModeActive = lastDeleted.isCompare; // 比較パーツだった場合は同じ見た目で復元
   // addPartは名前に「[比較]」を自動付与するため、復元時は元の名前から除去して渡す
   const restoredName = lastDeleted.isCompare ? lastDeleted.name.replace(/^\[比較\] /,'') : lastDeleted.name;
-  addPart(lastDeleted.geo, lastDeleted.color, restoredName);
+  addPart(lastDeleted.geo, lastDeleted.color, restoredName, lastDeleted.map);
   compareModeActive = wasCompare;
   lastDeleted = null;
   document.getElementById('btn-undo').disabled = true;
@@ -5475,7 +5480,7 @@ function setMat(type){
     document.getElementById('mat-'+k).classList.toggle('active',k===type)
   );
   partMeshes.forEach(p=>{
-    p.solid.material = makeMat(p.color, type);
+    p.solid.material = makeMat(p.color, type, p.map);
   });
   saveSettings();
 }
@@ -5495,14 +5500,14 @@ document.getElementById('bg-custom').addEventListener('input', e=>{
 
 function setColor(hex, el){
   curColor = hex;
-  document.querySelectorAll('.swatch').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('#swatch-row .swatch').forEach(e=>e.classList.remove('active'));
   el.classList.add('active');
-  // 選択中パーツのみ or 全パーツ
+  // 選択中パーツのみ or 全パーツ（明示的に単色を選んだ場合はテクスチャ（GLB等）より優先して解除する）
   if(selectedPart !== null){
     const p = partMeshes[selectedPart];
-    if(p){ p.color.setHex(hex); p.solid.material=makeMat(p.color,curMat); buildPartsList(); }
+    if(p){ p.color.setHex(hex); p.map=null; p.solid.material=makeMat(p.color,curMat); buildPartsList(); }
   } else {
-    partMeshes.forEach(p=>{ p.color.setHex(hex); p.solid.material=makeMat(p.color,curMat); });
+    partMeshes.forEach(p=>{ p.color.setHex(hex); p.map=null; p.solid.material=makeMat(p.color,curMat); });
   }
 }
 
