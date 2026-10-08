@@ -165,6 +165,12 @@ input[type=range]::-webkit-slider-thumb{
 .swatch:hover{transform:scale(1.2);}
 .swatch.active{border-color:#fff;}
 
+/* 全画面表示中の無操作オートハイド */
+#sidebar, #hint, #info-ov{ transition: opacity .35s ease, transform .35s ease; }
+body.fs-hide-ui #sidebar{ opacity:0; transform:translateX(-16px); pointer-events:none; }
+body.fs-hide-ui #hint{ opacity:0; pointer-events:none; }
+body.fs-hide-ui #info-ov{ opacity:0; transform:translateX(16px); pointer-events:none; }
+
 /* drag & drop overlay */
 #drop-overlay{
   position:fixed;inset:10px;border:3px dashed var(--accent);border-radius:16px;
@@ -363,8 +369,14 @@ body.dragging #drop-overlay{display:flex;}
         <button class="btn" onclick="resetView()">🏠 リセット</button>
         <button class="btn" id="btn-rot" onclick="toggleAutoRot()">⟳ 回転</button>
       </div>
+      <div class="btn-row btn-row3" id="rotspeed-row">
+        <button class="btn" data-speed="0.0025" onclick="setRotSpeed(0.0025,this)">遅い</button>
+        <button class="btn active" data-speed="0.005" onclick="setRotSpeed(0.005,this)">普通</button>
+        <button class="btn" data-speed="0.01" onclick="setRotSpeed(0.01,this)">速い</button>
+      </div>
       <button class="btn active" id="btn-info" onclick="toggleInfo()">ℹ モデル情報</button>
       <button class="btn" onclick="screenshot()">📷 スクリーンショット</button>
+      <button class="btn" id="btn-fullscreen" onclick="toggleFullscreen()">⛶ 全画面表示</button>
     </div>
   </div>
 
@@ -4587,8 +4599,14 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.7.1';
+const APP_VERSION = 'v1.7.4';
 // --- 変更履歴 ---
+// v1.7.4: 自動回転の速度を3段階（遅い/普通/速い）で選択可能に /
+//         全画面表示中、数秒無操作でサイドバー等を自動非表示にし、タップ等で再表示
+// v1.7.3: 全画面表示ボタンを追加（Fullscreen API、Esc終了にも追従）。
+//         自動回転機能は既にv1.1.0時点で実装済みだったため今回は変更なし
+// v1.7.2: gltfpack等で圧縮されたGLB（EXT_texture_webp / KHR_mesh_quantization使用、
+//         黒いシルエットで表示される既知の不具合あり）を読み込み前に検出し警告表示
 // v1.7.1: GLBのテクスチャ（baseColorTexture等）を単色に潰さず保持するよう修正 /
 //         カラースイッチの「active」判定が背景色スウォッチにも誤って波及していたバグを修正
 // v1.7.0: GLB/glTF対応（埋め込みGLTFLoader、Draco圧縮は非対応）/ ドラッグ&ドロップ読み込み /
@@ -4614,6 +4632,7 @@ let compareModeActive = false; // 比較用ファイルの読み込み中はtrue
 let curDensity = 1.24;     // g/cm³ (PLA既定)
 let pricePerKg = 3000;     // 円/kg
 let curBgColor = 0x0d0f14; // 背景色
+let rotSpeed   = 0.005;    // 自動回転の速度（ラジアン/フレーム）
 
 // ================================================================
 // 設定の記憶（localStorage）
@@ -4622,7 +4641,7 @@ const SETTINGS_KEY = 'ultimateCadViewerSettings_v1';
 function saveSettings(){
   try{
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor
+      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor, rotSpeed: rotSpeed
     }));
   }catch(e){ /* localStorageが使えない環境では無視 */ }
 }
@@ -4636,6 +4655,7 @@ function loadSettings(){
     if(typeof s.density==='number') curDensity = s.density;
     if(typeof s.price==='number') pricePerKg = s.price;
     if(typeof s.bg==='number') curBgColor = s.bg;
+    if(typeof s.rotSpeed==='number') rotSpeed = s.rotSpeed;
   }catch(e){ /* 無視 */ }
 }
 loadSettings();
@@ -4652,6 +4672,9 @@ document.getElementById('app-version').textContent = APP_VERSION;
 );
 document.querySelectorAll('#density-row .btn').forEach(b=>{
   b.classList.toggle('active', parseFloat(b.dataset.density)===curDensity);
+});
+document.querySelectorAll('#rotspeed-row .btn').forEach(b=>{
+  b.classList.toggle('active', parseFloat(b.dataset.speed)===rotSpeed);
 });
 document.getElementById('price-per-kg').value = pricePerKg;
 scene.background = new THREE.Color(curBgColor);
@@ -4989,6 +5012,7 @@ async function loadFile(file){
   const isGLB  = ext.endsWith('.glb');
   const isZIP  = ext.endsWith('.zip');
   if(!isSTEP&&!isSTL&&!is3MF&&!isOBJ&&!isGLB&&!isZIP){ setStatus('error','❌ .step/.stp/.stl/.3mf/.obj/.glb/.zip のみ対応'); return; }
+  let glbWarning = null;
 
   setStatus('loading',`読み込み中: ${file.name}`);
   showLoading(true,'ファイルを解析中...', file.name+' ('+Math.round(file.size/1024)+' KB)');
@@ -5068,7 +5092,7 @@ async function loadFile(file){
 
     } else if(isGLB) {
       document.getElementById('ld-txt').textContent='GLBを解析中...';
-      await loadGLBBuffer(buffer, file.name);
+      glbWarning = await loadGLBBuffer(buffer, file.name);
       document.getElementById('i-fmt').textContent='GLB / glTF';
     }
 
@@ -5077,7 +5101,11 @@ async function loadFile(file){
     buildPartsList();
     updateModelInfo();
     applyMode(curMode);
-    setStatus('ready',`✅ 読み込み完了 — ${partMeshes.length}パーツ`);
+    if(glbWarning){
+      setStatus('warn', `⚠️ 読み込み完了（圧縮GLB検出: ${glbWarning.join(', ')} — 黒く表示される場合はテクスチャ非圧縮版に変換してください）`);
+    } else {
+      setStatus('ready',`✅ 読み込み完了 — ${partMeshes.length}パーツ`);
+    }
 
   } catch(err){
     console.error(err);
@@ -5184,10 +5212,30 @@ function loadOBJText(text, sourceName){
   });
 }
 
+// GLBのJSONチャンクだけを覗いて拡張仕様を調べる（フルパース前の軽量チェック）
+// gltfpack等で圧縮されたファイル（WebPテクスチャ必須 + 法線量子化）は、
+// 埋め込みGLTFLoader（three.js r0.142）だと黒いシルエットになることがあるため事前警告する
+function peekGLBRiskyExtensions(arrayBuffer){
+  try{
+    const dv = new DataView(arrayBuffer);
+    if(dv.getUint32(0, true) !== 0x46546C67) return null; // 'glTF' マジックでなければGLBではない
+    const jsonLength = dv.getUint32(12, true);
+    const jsonBytes = new Uint8Array(arrayBuffer, 20, jsonLength);
+    const json = JSON.parse(new TextDecoder().decode(jsonBytes));
+    const used = json.extensionsUsed || [];
+    const risky = used.filter(e => e==='EXT_texture_webp' || e==='KHR_mesh_quantization');
+    return risky.length ? risky : null;
+  }catch(e){ return null; } // 解析に失敗しても警告をスキップするだけで本処理には影響させない
+}
+
 // GLB/glTFバイナリからパーツを生成（Draco圧縮メッシュは非対応）
 // シーングラフを走査し、各メッシュのワールド変換（位置・回転・スケール）を
 // ジオメトリに焼き込んだ上で、他形式と同様に平たいパーツとして追加する
 function loadGLBBuffer(arrayBuffer, sourceName){
+  const risky = peekGLBRiskyExtensions(arrayBuffer);
+  if(risky){
+    console.warn('⚠️ 圧縮GLB検出:', risky.join(', '), '— gltfpack等で圧縮されたファイルは正しく表示されないことがあります');
+  }
   return new Promise((resolve, reject)=>{
     const loader = new THREE.GLTFLoader();
     loader.parse(arrayBuffer, '', (gltf)=>{
@@ -5211,7 +5259,7 @@ function loadGLBBuffer(arrayBuffer, sourceName){
           const label = meshNodes.length > 1 ? `${sourceName} - ${node.name || ('Part_'+(i+1))}` : sourceName;
           addPart(geo, col, label, map);
         });
-        resolve();
+        resolve(risky);
       }catch(e){ reject(e); }
     }, (err)=>{
       const msg = (err && err.message) || '';
@@ -5240,6 +5288,7 @@ async function loadCompareFile(file){
   if(!isSTEP&&!isSTL&&!is3MF&&!isOBJ&&!isGLB&&!isZIP){ setStatus('error','❌ .step/.stp/.stl/.3mf/.obj/.glb/.zip のみ対応'); return; }
 
   if(!modelGroup){ modelGroup = new THREE.Group(); scene.add(modelGroup); }
+  let glbWarning = null;
 
   setStatus('loading',`比較ファイル読み込み中: ${file.name}`);
   showLoading(true,'比較用ファイルを解析中...', file.name);
@@ -5271,14 +5320,18 @@ async function loadCompareFile(file){
       const text = new TextDecoder().decode(buffer);
       loadOBJText(text, file.name);
     } else if(isGLB){
-      await loadGLBBuffer(buffer, file.name);
+      glbWarning = await loadGLBBuffer(buffer, file.name);
     }
 
     fitCamera();
     buildPartsList();
     updateModelInfo();
     applyMode(curMode);
-    setStatus('ready','✅ 比較ファイルの読み込み完了');
+    if(glbWarning){
+      setStatus('warn', `⚠️ 比較ファイル読み込み完了（圧縮GLB検出: ${glbWarning.join(', ')}）`);
+    } else {
+      setStatus('ready','✅ 比較ファイルの読み込み完了');
+    }
 
   } catch(err){
     console.error(err);
@@ -5713,6 +5766,57 @@ function toggleAutoRot(){
   autoRot=!autoRot;
   document.getElementById('btn-rot').classList.toggle('active',autoRot);
 }
+function setRotSpeed(v, el){
+  rotSpeed = v;
+  document.querySelectorAll('#rotspeed-row .btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  saveSettings();
+}
+
+// ================================================================
+// 全画面表示（ブラウザのFullscreen API。サイドバー込みのアプリ全体を対象にする）
+// ================================================================
+function toggleFullscreen(){
+  if(!document.fullscreenElement && !document.webkitFullscreenElement){
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if(!req){ setStatus('error','❌ このブラウザは全画面表示に対応していません'); return; }
+    req.call(el).catch(()=>{ setStatus('error','❌ 全画面表示を開始できませんでした'); });
+  } else {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if(exit) exit.call(document);
+  }
+}
+function syncFullscreenButton(){
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  document.getElementById('btn-fullscreen').classList.toggle('active', isFs);
+}
+
+// 全画面表示中、数秒操作がなければサイドバー等を自動で隠し、画面タップ等で再表示する
+const FS_HIDE_DELAY = 3000;
+let fsHideTimer = null;
+function isFullscreenNow(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+function scheduleFsHide(){
+  clearTimeout(fsHideTimer);
+  if(!isFullscreenNow()) return;
+  fsHideTimer = setTimeout(()=>{ document.body.classList.add('fs-hide-ui'); }, FS_HIDE_DELAY);
+}
+function showFsUI(){
+  document.body.classList.remove('fs-hide-ui');
+  scheduleFsHide();
+}
+['pointerdown','pointermove','touchstart','wheel','keydown'].forEach(evt=>{
+  window.addEventListener(evt, ()=>{ if(isFullscreenNow()) showFsUI(); }, {passive:true});
+});
+function onFullscreenChange(){
+  syncFullscreenButton();
+  if(isFullscreenNow()) showFsUI();
+  else { clearTimeout(fsHideTimer); document.body.classList.remove('fs-hide-ui'); }
+}
+document.addEventListener('fullscreenchange', onFullscreenChange);
+document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
 function toggleInfo(){
   infoVisible=!infoVisible;
@@ -5812,7 +5916,7 @@ function setStatus(type,msg){
   d.className='';
   if(type==='loading') d.classList.add('loading');
   else if(type==='error') d.classList.add('error');
-  d.style.background={ready:'#2ecc71',loading:'#00d4ff',error:'#e74c3c',muted:'#6b7a90'}[type]||'#6b7a90';
+  d.style.background={ready:'#2ecc71',loading:'#00d4ff',error:'#e74c3c',warn:'#f1c40f',muted:'#6b7a90'}[type]||'#6b7a90';
   document.getElementById('status-txt').textContent=msg;
 }
 function showLoading(on, txt='', sub=''){
@@ -5853,7 +5957,7 @@ function drawAxis(){
 function animate(){
   requestAnimationFrame(animate);
   controls.update(); // dampingに必要
-  if(autoRot && modelGroup) modelGroup.rotation.y+=0.005;
+  if(autoRot && modelGroup) modelGroup.rotation.y+=rotSpeed;
   updateMeasureLabelPos();
   renderer.render(scene,camera);
   drawAxis();
