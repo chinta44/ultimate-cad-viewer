@@ -375,9 +375,9 @@ body.dragging #drop-overlay{display:flex;}
         <button class="btn" id="btn-rot" onclick="toggleAutoRot()">⟳ 回転</button>
       </div>
       <div class="btn-row btn-row3" id="rotspeed-row">
-        <button class="btn" data-speed="0.0025" onclick="setRotSpeed(0.0025,this)">遅い</button>
-        <button class="btn active" data-speed="0.005" onclick="setRotSpeed(0.005,this)">普通</button>
-        <button class="btn" data-speed="0.01" onclick="setRotSpeed(0.01,this)">速い</button>
+        <button class="btn" data-speed="0.005" onclick="setRotSpeed(0.005,this)">遅い</button>
+        <button class="btn active" data-speed="0.01" onclick="setRotSpeed(0.01,this)">普通</button>
+        <button class="btn" data-speed="0.02" onclick="setRotSpeed(0.02,this)">速い</button>
       </div>
       <button class="btn active" id="btn-info" onclick="toggleInfo()">ℹ モデル情報</button>
       <button class="btn" onclick="screenshot()">📷 スクリーンショット</button>
@@ -4604,8 +4604,9 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.7.6';
+const APP_VERSION = 'v1.7.7';
 // --- 変更履歴 ---
+// v1.7.7: 自動回転速度を再調整（遅い=旧普通 / 普通=旧速い / 速い=旧速いの2倍）。旧バージョンの保存値は「普通」に戻す
 // v1.7.6: 自動回転がモデルの中心ではなくワールド原点基準で回って大きく公転して見える問題を修正
 // v1.7.5: <head>にファビコンの<link>タグが無く、画像ファイルを置いただけでは
 //         表示されていなかった不具合を修正（favicon.ico等を参照するタグを追加）
@@ -4640,7 +4641,7 @@ let compareModeActive = false; // 比較用ファイルの読み込み中はtrue
 let curDensity = 1.24;     // g/cm³ (PLA既定)
 let pricePerKg = 3000;     // 円/kg
 let curBgColor = 0x0d0f14; // 背景色
-let rotSpeed   = 0.005;    // 自動回転の速度（ラジアン/フレーム）
+let rotSpeed   = 0.01;     // 自動回転の速度（ラジアン/フレーム）
 
 // ================================================================
 // 設定の記憶（localStorage）
@@ -4681,6 +4682,8 @@ document.getElementById('app-version').textContent = APP_VERSION;
 document.querySelectorAll('#density-row .btn').forEach(b=>{
   b.classList.toggle('active', parseFloat(b.dataset.density)===curDensity);
 });
+// 保存済みの速度が現行の3段階に一致しない場合（旧バージョンの値）は「普通」に戻す
+if(![0.005,0.01,0.02].includes(rotSpeed)) rotSpeed = 0.01;
 document.querySelectorAll('#rotspeed-row .btn').forEach(b=>{
   b.classList.toggle('active', parseFloat(b.dataset.speed)===rotSpeed);
 });
