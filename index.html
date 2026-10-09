@@ -4604,8 +4604,9 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.7.5';
+const APP_VERSION = 'v1.7.6';
 // --- 変更履歴 ---
+// v1.7.6: 自動回転がモデルの中心ではなくワールド原点基準で回って大きく公転して見える問題を修正
 // v1.7.5: <head>にファビコンの<link>タグが無く、画像ファイルを置いただけでは
 //         表示されていなかった不具合を修正（favicon.ico等を参照するタグを追加）
 // v1.7.4: 自動回転の速度を3段階（遅い/普通/速い）で選択可能に /
@@ -5959,12 +5960,36 @@ function drawAxis(){
 }
 
 // ================================================================
+// 自動回転：モデル自身の中心（バウンディングボックス中心）を軸に回す
+// （グループの原点基準で回すと、原点から離れたモデルが大きく公転してしまうため）
+// ================================================================
+const _rotCenter = new THREE.Box3();
+const _rotTmp    = new THREE.Vector3();
+function rotateModelAroundCenter(step){
+  if(!partMeshes.length) return;
+  // グループのローカル座標系でのモデル中心（分解ビューの位置ずれも含む）
+  _rotCenter.makeEmpty();
+  partMeshes.forEach(p=>{
+    if(!p.solid.visible) return;
+    const bb = p.solid.geometry.boundingBox;
+    if(!bb) return;
+    _rotCenter.union(bb.clone().translate(p.solid.position));
+  });
+  if(_rotCenter.isEmpty()) return;
+  _rotCenter.getCenter(_rotTmp);
+  modelGroup.rotation.y += step;
+  // 回転後も中心がワールド上で動かないよう、グループ位置を補正する
+  const c = _rotTmp.clone();
+  modelGroup.position.copy(c).sub(c.applyAxisAngle(new THREE.Vector3(0,1,0), modelGroup.rotation.y));
+}
+
+// ================================================================
 // RENDER LOOP
 // ================================================================
 function animate(){
   requestAnimationFrame(animate);
   controls.update(); // dampingに必要
-  if(autoRot && modelGroup) modelGroup.rotation.y+=rotSpeed;
+  if(autoRot && modelGroup) rotateModelAroundCenter(rotSpeed);
   updateMeasureLabelPos();
   renderer.render(scene,camera);
   drawAxis();
