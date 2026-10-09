@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Ultimate CAD Viewer</title>
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="favicon-48x48.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
 :root {
   --accent:#00d4ff; --accent2:#ff7b2c; --bg:#0d0f14;
@@ -4599,8 +4604,10 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.7.4';
+const APP_VERSION = 'v1.7.5';
 // --- 変更履歴 ---
+// v1.7.5: <head>にファビコンの<link>タグが無く、画像ファイルを置いただけでは
+//         表示されていなかった不具合を修正（favicon.ico等を参照するタグを追加）
 // v1.7.4: 自動回転の速度を3段階（遅い/普通/速い）で選択可能に /
 //         全画面表示中、数秒無操作でサイドバー等を自動非表示にし、タップ等で再表示
 // v1.7.3: 全画面表示ボタンを追加（Fullscreen API、Esc終了にも追従）。
