@@ -12,7 +12,8 @@
 <style>
 :root {
   --accent:#00d4ff; --accent2:#ff7b2c; --bg:#0d0f14;
-  --panel:rgba(18,22,32,0.96); --border:rgba(255,255,255,0.09);
+  --panel-a:0; --panel-blur:0px;
+  --panel:rgba(18,22,32,var(--panel-a)); --border:rgba(255,255,255,0.09);
   --text:#e4eaf4; --muted:#6b7a90; --green:#2ecc71; --red:#e74c3c;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -24,7 +25,7 @@ body{overflow:hidden;background:var(--bg);font-family:'Segoe UI',system-ui,sans-
   position:fixed;top:0;left:0;bottom:0;width:270px;
   background:var(--panel);border-right:1px solid var(--border);
   display:flex;flex-direction:column;z-index:100;
-  backdrop-filter:blur(20px);
+  backdrop-filter:blur(var(--panel-blur));
 }
 #sidebar-header{
   padding:14px 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0;
@@ -151,7 +152,7 @@ input[type=range]::-webkit-slider-thumb{
   position:fixed;top:14px;right:14px;
   background:var(--panel);border:1px solid var(--border);
   border-radius:10px;padding:10px 13px;min-width:160px;
-  font-size:11px;display:block;z-index:90;backdrop-filter:blur(16px);
+  font-size:11px;display:block;z-index:90;backdrop-filter:blur(var(--panel-blur));
 }
 .info-row{display:flex;justify-content:space-between;gap:12px;padding:2px 0;}
 .info-l{color:var(--muted);}
@@ -171,6 +172,12 @@ input[type=range]::-webkit-slider-thumb{
 .swatch:hover{transform:scale(1.2);}
 .swatch.active{border-color:#fff;}
 
+/* パネル背景が薄いときは文字の縁取りで読みやすくする */
+body.ui-clear #sidebar, body.ui-clear #info-ov, body.ui-clear #ss-hud{
+  text-shadow:0 0 3px rgba(0,0,0,.95),0 1px 2px rgba(0,0,0,.9);
+}
+body.ui-clear #sidebar-header, body.ui-clear #statusbar{ border-color:rgba(255,255,255,.14); }
+
 /* 全画面表示中の無操作オートハイド */
 #sidebar, #hint, #info-ov{ transition: opacity .35s ease, transform .35s ease; }
 body.fs-hide-ui #sidebar{ opacity:0; transform:translateX(-16px); pointer-events:none; }
@@ -182,7 +189,7 @@ body.fs-hide-ui #info-ov{ opacity:0; transform:translateX(16px); pointer-events:
 #ss-hud{
   position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:300;display:none;
   align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);
-  border-radius:12px;padding:6px 10px;backdrop-filter:blur(16px);font-size:12px;
+  border-radius:12px;padding:6px 10px;backdrop-filter:blur(var(--panel-blur));font-size:12px;
   max-width:70vw;transition:opacity .35s ease;
 }
 #ss-hud-txt{max-width:36vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--accent);font-weight:700;padding:0 6px;}
@@ -413,6 +420,10 @@ body.dragging #drop-overlay{display:flex;}
     <!-- View controls -->
     <div class="sec">
       <div class="sec-title">視点・その他</div>
+      <div class="slider-wrap">
+        <div class="slider-label"><span>パネル背景の濃さ（0=透明）</span><span id="panel-a-val">0</span></div>
+        <input type="range" id="panel-a-range" min="0" max="100" step="1" value="0">
+      </div>
       <div class="btn-row btn-row3">
         <button class="btn" onclick="setView('front')">正面</button>
         <button class="btn" onclick="setView('top')">上面</button>
@@ -4654,8 +4665,9 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.10.1';
+const APP_VERSION = 'v1.10.2';
 // --- 変更履歴 ---
+// v1.10.2: サイドバー・モデル情報・操作バーの背景を透明にでき、濃さをスライダーで調整可能に（初期値は透明。透明時は文字に縁取りを付与）
 // v1.10.1: 分解ビューが全パーツを同じ方向へ動かすだけで分解されない不具合を修正（各パーツの中心をジオメトリから算出し、モデル中心から放射状に移動。距離はモデルの大きさ基準）
 // v1.10.0: スクリーンセーバーに「複数同時表示（ギャラリー）」モードを追加。1モデル表示と切替可能。
 //          3〜5台を重ならないよう配置し、間隔ごとに1〜2台入れ替え、ときどき台数も変化
@@ -4699,6 +4711,7 @@ let pricePerKg = 3000;     // 円/kg
 let curBgColor = 0x0d0f14; // 背景色
 let ssInterval = 3;       // スクリーンセーバーの切替間隔（分）
 let ssRandom   = false;   // ランダム順か
+let panelAlpha = 0;       // サイドバー/情報パネル等の背景の濃さ（0〜1、0で透明）
 let ssGallery  = false;   // true=複数同時表示（ギャラリー）、false=1モデル表示
 let rotSpeed   = 0.01;     // 自動回転の速度（ラジアン/フレーム）
 
@@ -4709,7 +4722,7 @@ const SETTINGS_KEY = 'ultimateCadViewerSettings_v1';
 function saveSettings(){
   try{
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor, rotSpeed: rotSpeed, ssInterval: ssInterval, ssRandom: ssRandom, ssGallery: ssGallery
+      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor, rotSpeed: rotSpeed, ssInterval: ssInterval, ssRandom: ssRandom, ssGallery: ssGallery, panelAlpha: panelAlpha
     }));
   }catch(e){ /* localStorageが使えない環境では無視 */ }
 }
@@ -4727,6 +4740,7 @@ function loadSettings(){
     if([1,3,5,10].includes(s.ssInterval)) ssInterval = s.ssInterval;
     if(typeof s.ssRandom==='boolean') ssRandom = s.ssRandom;
     if(typeof s.ssGallery==='boolean') ssGallery = s.ssGallery;
+    if(typeof s.panelAlpha==='number' && s.panelAlpha>=0 && s.panelAlpha<=1) panelAlpha = s.panelAlpha;
   }catch(e){ /* 無視 */ }
 }
 loadSettings();
@@ -4746,6 +4760,20 @@ document.querySelectorAll('#density-row .btn').forEach(b=>{
 });
 document.querySelectorAll('#ss-interval-row .btn').forEach(b=>{
   b.classList.toggle('active', parseInt(b.dataset.min)===ssInterval);
+});
+function applyPanelAlpha(a){
+  panelAlpha = a;
+  const root = document.documentElement.style;
+  root.setProperty('--panel-a', a.toFixed(2));
+  root.setProperty('--panel-blur', a < 0.05 ? '0px' : '16px');   // 完全透明のときはぼかしも外してモデルをそのまま見せる
+  document.body.classList.toggle('ui-clear', a < 0.6);
+  document.getElementById('panel-a-val').textContent = Math.round(a*100);
+}
+document.getElementById('panel-a-range').value = Math.round(panelAlpha*100);
+applyPanelAlpha(panelAlpha);
+document.getElementById('panel-a-range').addEventListener('input', e=>{
+  applyPanelAlpha(parseInt(e.target.value)/100);
+  saveSettings();
 });
 document.getElementById('btn-ss-random').textContent = '🔀 ランダム順: '+(ssRandom?'ON':'OFF');
 document.getElementById('btn-ss-gallery').textContent = '🪟 表示: '+(ssGallery?'複数同時（3〜5台）':'1モデル');
