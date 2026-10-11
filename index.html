@@ -69,6 +69,7 @@ body{overflow:hidden;background:var(--bg);font-family:'Segoe UI',system-ui,sans-
 .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;}
 .btn-row .btn{margin-bottom:0;}
 .btn-row3{grid-template-columns:1fr 1fr 1fr;}
+.btn-row4{grid-template-columns:1fr 1fr 1fr 1fr;}
 
 /* sliders */
 .slider-wrap{margin-bottom:8px;}
@@ -176,6 +177,23 @@ body.fs-hide-ui #sidebar{ opacity:0; transform:translateX(-16px); pointer-events
 body.fs-hide-ui #hint{ opacity:0; pointer-events:none; }
 body.fs-hide-ui #info-ov{ opacity:0; transform:translateX(16px); pointer-events:none; }
 
+/* スクリーンセーバー */
+#ss-fade{position:fixed;inset:0;z-index:50;background:#000;opacity:0;pointer-events:none;transition:opacity .7s ease;}
+#ss-hud{
+  position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:300;display:none;
+  align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);
+  border-radius:12px;padding:6px 10px;backdrop-filter:blur(16px);font-size:12px;
+  max-width:70vw;transition:opacity .35s ease;
+}
+#ss-hud-txt{max-width:36vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--accent);font-weight:700;padding:0 6px;}
+#ss-hud .ss-b{background:rgba(255,255,255,.07);border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px;font-family:inherit;}
+#ss-hud .ss-b:hover{background:rgba(255,255,255,.15);}
+body.ss-active #ss-hud{display:flex;}
+body.ss-active #loading-ov{display:none !important;}
+body.ss-active #hint{display:none;}
+body.fs-hide-ui #ss-hud{opacity:0;pointer-events:none;}
+
 /* drag & drop overlay */
 #drop-overlay{
   position:fixed;inset:10px;border:3px dashed var(--accent);border-radius:16px;
@@ -198,6 +216,17 @@ body.dragging #drop-overlay{display:flex;}
 
 <!-- 3D measure label -->
 <div class="measure-label-3d" id="measure-label"></div>
+
+<!-- Screensaver fade / HUD -->
+<div id="ss-fade"></div>
+<div id="ss-hud">
+  <button class="ss-b" onclick="ssAdvance(-1)" title="前へ (←)">⏮</button>
+  <button class="ss-b" id="ss-pause-btn" onclick="ssTogglePause()" title="一時停止/再開 (Space)">⏸</button>
+  <button class="ss-b" onclick="ssAdvance(1)" title="次へ (→)">⏭</button>
+  <span id="ss-hud-txt">—</span>
+  <button class="ss-b" onclick="toggleFullscreen()" title="全画面">⛶</button>
+  <button class="ss-b" onclick="ssStop()" title="終了">✕ 終了</button>
+</div>
 
 <!-- Drag & drop overlay -->
 <div id="drop-overlay">📂 ここにファイルをドロップして読み込む</div>
@@ -346,6 +375,24 @@ body.dragging #drop-overlay{display:flex;}
       <div class="info-row"><span class="info-l">体積</span><span class="info-v" id="w-vol">—</span></div>
       <div class="info-row"><span class="info-l">推定重量</span><span class="info-v" id="w-weight">—</span></div>
       <div class="info-row"><span class="info-l">推定材料費</span><span class="info-v" id="w-cost">—</span></div>
+    </div>
+
+    <!-- Screensaver -->
+    <div class="sec">
+      <div class="sec-title">スクリーンセーバー</div>
+      <div class="btn-row btn-row4" id="ss-interval-row">
+        <button class="btn" data-min="1"  onclick="setSsInterval(1,this)">1分</button>
+        <button class="btn" data-min="3"  onclick="setSsInterval(3,this)">3分</button>
+        <button class="btn" data-min="5"  onclick="setSsInterval(5,this)">5分</button>
+        <button class="btn" data-min="10" onclick="setSsInterval(10,this)">10分</button>
+      </div>
+      <button class="btn" id="btn-ss-random" onclick="toggleSsRandom()">🔀 ランダム順: OFF</button>
+      <button class="btn" id="btn-ss-resume" onclick="ssResume()" style="display:none;"></button>
+      <button class="btn" onclick="ssPickFolder()">🖼 フォルダを選んで開始</button>
+      <input type="file" id="ss-dir-in" webkitdirectory multiple style="display:none">
+      <p style="font-size:9.5px;color:var(--muted);margin-top:4px;line-height:1.4;">
+        全画面＋自動回転で、フォルダ内（サブフォルダ・ZIP含む）の3Dデータを設定時間ごとに切り替えます。画面タップで操作バー表示（←→:前後 / Space:一時停止）
+      </p>
     </div>
 
     <!-- Compare mode -->
@@ -4605,8 +4652,10 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.8.0';
+const APP_VERSION = 'v1.9.0';
 // --- 変更履歴 ---
+// v1.9.0: スクリーンセーバー機能（フォルダ選択→全画面＋自動回転→1/3/5/10分ごとに切替、順番/ランダム、前回フォルダの記憶、画面スリープ防止）。
+//         モデル切替時に前のモデルのGPUメモリを解放するよう修正
 // v1.8.0: 質感プリセットに「ホログラム」を追加（輪郭発光＋走査線＋流れる光の帯のアニメーション。明るい背景では通常合成に自動切替）
 // v1.7.7: 自動回転速度を再調整（遅い=旧普通 / 普通=旧速い / 速い=旧速いの2倍）。旧バージョンの保存値は「普通」に戻す
 // v1.7.6: 自動回転がモデルの中心ではなくワールド原点基準で回って大きく公転して見える問題を修正
@@ -4643,6 +4692,8 @@ let compareModeActive = false; // 比較用ファイルの読み込み中はtrue
 let curDensity = 1.24;     // g/cm³ (PLA既定)
 let pricePerKg = 3000;     // 円/kg
 let curBgColor = 0x0d0f14; // 背景色
+let ssInterval = 3;       // スクリーンセーバーの切替間隔（分）
+let ssRandom   = false;   // ランダム順か
 let rotSpeed   = 0.01;     // 自動回転の速度（ラジアン/フレーム）
 
 // ================================================================
@@ -4652,7 +4703,7 @@ const SETTINGS_KEY = 'ultimateCadViewerSettings_v1';
 function saveSettings(){
   try{
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor, rotSpeed: rotSpeed
+      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor, rotSpeed: rotSpeed, ssInterval: ssInterval, ssRandom: ssRandom
     }));
   }catch(e){ /* localStorageが使えない環境では無視 */ }
 }
@@ -4667,6 +4718,8 @@ function loadSettings(){
     if(typeof s.price==='number') pricePerKg = s.price;
     if(typeof s.bg==='number') curBgColor = s.bg;
     if(typeof s.rotSpeed==='number') rotSpeed = s.rotSpeed;
+    if([1,3,5,10].includes(s.ssInterval)) ssInterval = s.ssInterval;
+    if(typeof s.ssRandom==='boolean') ssRandom = s.ssRandom;
   }catch(e){ /* 無視 */ }
 }
 loadSettings();
@@ -4684,6 +4737,11 @@ document.getElementById('app-version').textContent = APP_VERSION;
 document.querySelectorAll('#density-row .btn').forEach(b=>{
   b.classList.toggle('active', parseFloat(b.dataset.density)===curDensity);
 });
+document.querySelectorAll('#ss-interval-row .btn').forEach(b=>{
+  b.classList.toggle('active', parseInt(b.dataset.min)===ssInterval);
+});
+document.getElementById('btn-ss-random').textContent = '🔀 ランダム順: '+(ssRandom?'ON':'OFF');
+document.getElementById('btn-ss-random').classList.toggle('active', ssRandom);
 // 保存済みの速度が現行の3段階に一致しない場合（旧バージョンの値）は「普通」に戻す
 if(![0.005,0.01,0.02].includes(rotSpeed)) rotSpeed = 0.01;
 document.querySelectorAll('#rotspeed-row .btn').forEach(b=>{
@@ -5105,6 +5163,14 @@ async function loadFile(file){
   // 既存モデルをクリア
   if(modelGroup){ scene.remove(modelGroup); }
   modelGroup = new THREE.Group();
+  // 前のモデルのGPUメモリを解放（スクリーンセーバー等で長時間・多数読み込んでも増え続けないように）
+  partMeshes.forEach(p=>{
+    p.solid.geometry.dispose();
+    p.solid.material.dispose();
+    p.wire.material.dispose();
+    if(p.map) p.map.dispose();
+  });
+  if(lastDeleted) lastDeleted.geo.dispose();
   partMeshes = [];
   lastDeleted = null;
   document.getElementById('btn-undo').disabled = true;
@@ -5882,7 +5948,7 @@ function isFullscreenNow(){
 }
 function scheduleFsHide(){
   clearTimeout(fsHideTimer);
-  if(!isFullscreenNow()) return;
+  if(!isFullscreenNow() && !ssActive) return;
   fsHideTimer = setTimeout(()=>{ document.body.classList.add('fs-hide-ui'); }, FS_HIDE_DELAY);
 }
 function showFsUI(){
@@ -5890,15 +5956,242 @@ function showFsUI(){
   scheduleFsHide();
 }
 ['pointerdown','pointermove','touchstart','wheel','keydown'].forEach(evt=>{
-  window.addEventListener(evt, ()=>{ if(isFullscreenNow()) showFsUI(); }, {passive:true});
+  window.addEventListener(evt, ()=>{ if(isFullscreenNow() || ssActive) showFsUI(); }, {passive:true});
 });
 function onFullscreenChange(){
   syncFullscreenButton();
+  if(ssActive){
+    // スクリーンセーバー中：全画面に入ったあと全画面が解除された（Esc等）ら終了する
+    if(isFullscreenNow()) ssFsEntered = true;
+    else if(ssFsEntered){ ssStop(); return; }
+    showFsUI();
+    return;
+  }
   if(isFullscreenNow()) showFsUI();
   else { clearTimeout(fsHideTimer); document.body.classList.remove('fs-hide-ui'); }
 }
 document.addEventListener('fullscreenchange', onFullscreenChange);
 document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+
+// ================================================================
+// スクリーンセーバー（フォルダ内の3Dデータを一定間隔で切り替え表示）
+// ================================================================
+const SS_EXT = /\.(step|stp|stl|3mf|obj|glb|zip)$/i;
+let ssActive = false, ssBusy = false, ssPaused = false, ssFsEntered = false;
+let ssList = [], ssIndex = -1, ssFails = 0, ssTimer = null, ssPrevAutoRot = false, ssWakeLock = null;
+let ssSavedHandle = null;
+
+function setSsInterval(min, el){
+  ssInterval = min;
+  document.querySelectorAll('#ss-interval-row .btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  saveSettings();
+  if(ssActive && !ssPaused && !ssBusy) ssSchedule(ssInterval*60000);
+}
+function toggleSsRandom(){
+  ssRandom = !ssRandom;
+  const b = document.getElementById('btn-ss-random');
+  b.textContent = '🔀 ランダム順: '+(ssRandom?'ON':'OFF');
+  b.classList.toggle('active', ssRandom);
+  saveSettings();
+}
+
+// ---- 前回選んだフォルダの記憶（IndexedDB。対応ブラウザのみ） ----
+function ssIdb(){
+  return new Promise((res,rej)=>{
+    const r = indexedDB.open('ucv-screensaver',1);
+    r.onupgradeneeded = ()=>r.result.createObjectStore('kv');
+    r.onsuccess = ()=>res(r.result);
+    r.onerror = ()=>rej(r.error);
+  });
+}
+async function ssIdbGet(key){
+  try{
+    const db = await ssIdb();
+    return await new Promise((res,rej)=>{
+      const q = db.transaction('kv').objectStore('kv').get(key);
+      q.onsuccess = ()=>res(q.result||null); q.onerror = ()=>rej(q.error);
+    });
+  }catch(e){ return null; }
+}
+async function ssIdbSet(key,val){
+  try{
+    const db = await ssIdb();
+    await new Promise((res,rej)=>{
+      const q = db.transaction('kv','readwrite').objectStore('kv').put(val,key);
+      q.onsuccess = ()=>res(); q.onerror = ()=>rej(q.error);
+    });
+  }catch(e){ /* 保存できなくても動作には影響なし */ }
+}
+(async ()=>{
+  if(!window.showDirectoryPicker) return;
+  const h = await ssIdbGet('dir');
+  if(h && h.kind==='directory'){
+    ssSavedHandle = h;
+    const b = document.getElementById('btn-ss-resume');
+    b.textContent = '▶ 前回のフォルダで再開: '+h.name;
+    b.style.display = '';
+  }
+})();
+
+// ---- フォルダ走査 ----
+async function ssCollect(dirHandle, prefix='', depth=0, out=[]){
+  for await (const [name, h] of dirHandle.entries()){
+    if(name.startsWith('.')) continue;
+    if(h.kind==='file'){
+      if(SS_EXT.test(name)) out.push({name: prefix+name, getFile: ()=>h.getFile()});
+    } else if(depth < 3){
+      await ssCollect(h, prefix+name+'/', depth+1, out);
+    }
+  }
+  return out;
+}
+async function ssPickFolder(){
+  if(!window.showDirectoryPicker){ document.getElementById('ss-dir-in').click(); return; }
+  try{
+    const h = await window.showDirectoryPicker({mode:'read'});
+    ssIdbSet('dir', h);
+    setStatus('loading','フォルダを走査中...');
+    ssStart(await ssCollect(h));
+  }catch(e){
+    if(e && e.name==='AbortError') return;
+    console.error(e);
+    setStatus('error','❌ フォルダを開けませんでした: '+(e.message||e));
+  }
+}
+async function ssResume(){
+  if(!ssSavedHandle) return;
+  try{
+    const perm = await ssSavedHandle.requestPermission({mode:'read'});
+    if(perm !== 'granted'){ setStatus('error','❌ フォルダへのアクセスが許可されませんでした'); return; }
+    setStatus('loading','フォルダを走査中...');
+    ssStart(await ssCollect(ssSavedHandle));
+  }catch(e){
+    console.error(e);
+    setStatus('error','❌ 前回のフォルダを開けませんでした（フォルダが移動・削除された可能性があります）');
+  }
+}
+document.getElementById('ss-dir-in').addEventListener('change', e=>{
+  const items = [...e.target.files].filter(f=>SS_EXT.test(f.name))
+    .map(f=>({name: f.webkitRelativePath||f.name, getFile: async()=>f}));
+  e.target.value = '';
+  ssStart(items);
+});
+
+// ---- 再生制御 ----
+function ssShuffle(){
+  for(let i=ssList.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [ssList[i],ssList[j]] = [ssList[j],ssList[i]];
+  }
+}
+function ssSchedule(ms){
+  clearTimeout(ssTimer);
+  ssTimer = setTimeout(()=>ssAdvance(1), ms);
+}
+const ssSleep = ms => new Promise(r=>setTimeout(r,ms));
+async function ssAcquireWake(){
+  try{ if('wakeLock' in navigator) ssWakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(ssActive && document.visibilityState==='visible') ssAcquireWake();
+});
+
+async function ssStart(items){
+  if(!items.length){ setStatus('error','❌ このフォルダに対応ファイル（STEP/STL/3MF/OBJ/GLB/ZIP）が見つかりません'); return; }
+  if(ssActive) ssStop();
+  items.sort((a,b)=>a.name.localeCompare(b.name,'ja',{numeric:true}));
+  ssList = items;
+  if(ssRandom) ssShuffle();
+  ssIndex = -1; ssFails = 0; ssPaused = false; ssBusy = false; ssFsEntered = false;
+  document.getElementById('ss-pause-btn').textContent = '⏸';
+  ssActive = true;
+  document.body.classList.add('ss-active');
+  ssPrevAutoRot = autoRot;
+  if(!autoRot) toggleAutoRot();
+  // 全画面（ユーザー操作から時間が経つと拒否されることがある。その場合はHUDの⛶から切替可能）
+  try{
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if(req) await req.call(el);
+  }catch(e){ /* 無視 */ }
+  ssAcquireWake();
+  showFsUI();
+  ssAdvance(1);
+}
+
+async function ssAdvance(dir){
+  if(!ssActive || ssBusy) return;
+  ssBusy = true;
+  clearTimeout(ssTimer);
+  const n = ssList.length;
+  const first = (ssIndex === -1);
+  let idx = ssIndex + dir;
+  if(idx >= n){ idx = 0; if(ssRandom) ssShuffle(); }
+  if(idx < 0) idx = n-1;
+  ssIndex = idx;
+  const item = ssList[idx];
+
+  // フェードアウト（背景色と同じ色で覆う）
+  const fade = document.getElementById('ss-fade');
+  fade.style.background = '#'+new THREE.Color(curBgColor).getHexString();
+  fade.style.opacity = '1';
+  await ssSleep(first ? 50 : 750);
+
+  let ok = false;
+  try{
+    const file = await item.getFile();
+    await loadFile(file);
+    ok = partMeshes.length > 0;
+  }catch(e){ console.error('スクリーンセーバー: 読み込み失敗', item.name, e); }
+
+  if(!ssActive){ ssBusy = false; return; }
+  document.getElementById('ss-hud-txt').textContent = `${idx+1}/${n}  ${item.name}`;
+  ssBusy = false;
+  if(ok){
+    ssFails = 0;
+    fade.style.opacity = '0';
+  } else {
+    ssFails++;
+    if(ssFails >= n){
+      ssStop();
+      setStatus('error','❌ フォルダ内のファイルを1つも読み込めませんでした');
+      return;
+    }
+  }
+  if(!ssPaused) ssSchedule(ok ? ssInterval*60000 : 1500);
+}
+
+function ssTogglePause(){
+  if(!ssActive) return;
+  ssPaused = !ssPaused;
+  document.getElementById('ss-pause-btn').textContent = ssPaused ? '▶' : '⏸';
+  if(ssPaused) clearTimeout(ssTimer);
+  else if(!ssBusy) ssSchedule(ssInterval*60000);
+}
+
+function ssStop(){
+  if(!ssActive) return;
+  ssActive = false; ssBusy = false;
+  clearTimeout(ssTimer);
+  document.body.classList.remove('ss-active');
+  document.getElementById('ss-fade').style.opacity = '0';
+  if(autoRot !== ssPrevAutoRot) toggleAutoRot();
+  if(ssWakeLock){ try{ ssWakeLock.release(); }catch(e){} ssWakeLock = null; }
+  if(isFullscreenNow() && ssFsEntered){
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if(exit) exit.call(document);
+  }
+  if(!isFullscreenNow()){ clearTimeout(fsHideTimer); document.body.classList.remove('fs-hide-ui'); }
+  setStatus('muted','スクリーンセーバーを終了しました');
+}
+window.addEventListener('keydown', e=>{
+  if(!ssActive) return;
+  if(e.key==='ArrowRight') ssAdvance(1);
+  else if(e.key==='ArrowLeft') ssAdvance(-1);
+  else if(e.key===' '){ e.preventDefault(); ssTogglePause(); }
+});
 
 function toggleInfo(){
   infoVisible=!infoVisible;
