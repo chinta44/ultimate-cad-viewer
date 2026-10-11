@@ -386,12 +386,13 @@ body.dragging #drop-overlay{display:flex;}
         <button class="btn" data-min="5"  onclick="setSsInterval(5,this)">5分</button>
         <button class="btn" data-min="10" onclick="setSsInterval(10,this)">10分</button>
       </div>
+      <button class="btn" id="btn-ss-gallery" onclick="toggleSsGallery()">🪟 表示: 1モデル</button>
       <button class="btn" id="btn-ss-random" onclick="toggleSsRandom()">🔀 ランダム順: OFF</button>
       <button class="btn" id="btn-ss-resume" onclick="ssResume()" style="display:none;"></button>
       <button class="btn" onclick="ssPickFolder()">🖼 フォルダを選んで開始</button>
       <input type="file" id="ss-dir-in" webkitdirectory multiple style="display:none">
       <p style="font-size:9.5px;color:var(--muted);margin-top:4px;line-height:1.4;">
-        全画面＋自動回転で、フォルダ内（サブフォルダ・ZIP含む）の3Dデータを設定時間ごとに切り替えます。画面タップで操作バー表示（←→:前後 / Space:一時停止）
+        全画面＋自動回転で、フォルダ内（サブフォルダ・ZIP含む）の3Dデータを設定時間ごとに切り替えます。「複数同時」では3〜5台を重ならないよう並べ、間隔ごとに1〜2台ずつ入れ替え、ときどき台数も変わります。画面タップで操作バー表示（←→:前後 / Space:一時停止）
       </p>
     </div>
 
@@ -4647,13 +4648,16 @@ window.addEventListener('resize',()=>{
   camera.aspect=innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
+  if(galleryActive) galCamGoal = galCamFor(galSlots.filter(s=>!s.dying).length||1);
 });
 
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.9.0';
+const APP_VERSION = 'v1.10.0';
 // --- 変更履歴 ---
+// v1.10.0: スクリーンセーバーに「複数同時表示（ギャラリー）」モードを追加。1モデル表示と切替可能。
+//          3〜5台を重ならないよう配置し、間隔ごとに1〜2台入れ替え、ときどき台数も変化
 // v1.9.0: スクリーンセーバー機能（フォルダ選択→全画面＋自動回転→1/3/5/10分ごとに切替、順番/ランダム、前回フォルダの記憶、画面スリープ防止）。
 //         モデル切替時に前のモデルのGPUメモリを解放するよう修正
 // v1.8.0: 質感プリセットに「ホログラム」を追加（輪郭発光＋走査線＋流れる光の帯のアニメーション。明るい背景では通常合成に自動切替）
@@ -4694,6 +4698,7 @@ let pricePerKg = 3000;     // 円/kg
 let curBgColor = 0x0d0f14; // 背景色
 let ssInterval = 3;       // スクリーンセーバーの切替間隔（分）
 let ssRandom   = false;   // ランダム順か
+let ssGallery  = false;   // true=複数同時表示（ギャラリー）、false=1モデル表示
 let rotSpeed   = 0.01;     // 自動回転の速度（ラジアン/フレーム）
 
 // ================================================================
@@ -4703,7 +4708,7 @@ const SETTINGS_KEY = 'ultimateCadViewerSettings_v1';
 function saveSettings(){
   try{
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor, rotSpeed: rotSpeed, ssInterval: ssInterval, ssRandom: ssRandom
+      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor, rotSpeed: rotSpeed, ssInterval: ssInterval, ssRandom: ssRandom, ssGallery: ssGallery
     }));
   }catch(e){ /* localStorageが使えない環境では無視 */ }
 }
@@ -4720,6 +4725,7 @@ function loadSettings(){
     if(typeof s.rotSpeed==='number') rotSpeed = s.rotSpeed;
     if([1,3,5,10].includes(s.ssInterval)) ssInterval = s.ssInterval;
     if(typeof s.ssRandom==='boolean') ssRandom = s.ssRandom;
+    if(typeof s.ssGallery==='boolean') ssGallery = s.ssGallery;
   }catch(e){ /* 無視 */ }
 }
 loadSettings();
@@ -4741,6 +4747,8 @@ document.querySelectorAll('#ss-interval-row .btn').forEach(b=>{
   b.classList.toggle('active', parseInt(b.dataset.min)===ssInterval);
 });
 document.getElementById('btn-ss-random').textContent = '🔀 ランダム順: '+(ssRandom?'ON':'OFF');
+document.getElementById('btn-ss-gallery').textContent = '🪟 表示: '+(ssGallery?'複数同時（3〜5台）':'1モデル');
+document.getElementById('btn-ss-gallery').classList.toggle('active', ssGallery);
 document.getElementById('btn-ss-random').classList.toggle('active', ssRandom);
 // 保存済みの速度が現行の3段階に一致しない場合（旧バージョンの値）は「普通」に戻す
 if(![0.005,0.01,0.02].includes(rotSpeed)) rotSpeed = 0.01;
@@ -5671,6 +5679,7 @@ function applyMode(m){
     p.solid.visible = m !== 'wire';
     p.wire.visible  = m !== 'solid';
   });
+  if(galleryActive) galAllParts().forEach(p=>{ p.solid.visible = m !== 'wire'; p.wire.visible = m !== 'solid'; });
 }
 function setMode(m){ applyMode(m); saveSettings(); }
 
@@ -5682,6 +5691,7 @@ function setMat(type){
   partMeshes.forEach(p=>{
     p.solid.material = makeMat(p.color, type, p.map);
   });
+  if(galleryActive) galApplyMaterials();
   saveSettings();
 }
 
@@ -5689,6 +5699,7 @@ function setBgColor(hex, el){
   curBgColor = hex;
   scene.background = new THREE.Color(hex);
   if(curMat==='holo') partMeshes.forEach(p=>{ if(!p.isCompare) p.solid.material = makeMat(p.color, 'holo', p.map); });
+  if(galleryActive && curMat==='holo') galApplyMaterials();
   document.querySelectorAll('#bg-swatch-row .swatch').forEach(s=>s.classList.remove('active'));
   if(el) el.classList.add('active');
   document.getElementById('bg-custom').value = '#'+new THREE.Color(hex).getHexString();
@@ -5703,6 +5714,7 @@ function setColor(hex, el){
   curColor = hex;
   document.querySelectorAll('#swatch-row .swatch').forEach(e=>e.classList.remove('active'));
   el.classList.add('active');
+  if(galleryActive){ galAllParts().forEach(p=>{ p.color.setHex(hex); p.map=null; p.solid.material=makeMat(p.color,curMat); }); return; }
   // 選択中パーツのみ or 全パーツ（明示的に単色を選んだ場合はテクスチャ（GLB等）より優先して解除する）
   if(selectedPart !== null){
     const p = partMeshes[selectedPart];
@@ -5987,7 +5999,7 @@ function setSsInterval(min, el){
   document.querySelectorAll('#ss-interval-row .btn').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   saveSettings();
-  if(ssActive && !ssPaused && !ssBusy) ssSchedule(ssInterval*60000);
+  if(ssActive && !ssPaused && !ssBusy && !galBusy) ssSchedule(ssInterval*60000);
 }
 function toggleSsRandom(){
   ssRandom = !ssRandom;
@@ -6118,11 +6130,12 @@ async function ssStart(items){
   }catch(e){ /* 無視 */ }
   ssAcquireWake();
   showFsUI();
-  ssAdvance(1);
+  if(ssGallery) galleryStart(); else ssAdvance(1);
 }
 
 async function ssAdvance(dir){
   if(!ssActive || ssBusy) return;
+  if(ssGallery){ galTick(); return; }
   ssBusy = true;
   clearTimeout(ssTimer);
   const n = ssList.length;
@@ -6168,13 +6181,14 @@ function ssTogglePause(){
   ssPaused = !ssPaused;
   document.getElementById('ss-pause-btn').textContent = ssPaused ? '▶' : '⏸';
   if(ssPaused) clearTimeout(ssTimer);
-  else if(!ssBusy) ssSchedule(ssInterval*60000);
+  else if(!ssBusy && !galBusy) ssSchedule(ssInterval*60000);
 }
 
 function ssStop(){
   if(!ssActive) return;
   ssActive = false; ssBusy = false;
   clearTimeout(ssTimer);
+  if(galleryActive) galleryStop();
   document.body.classList.remove('ss-active');
   document.getElementById('ss-fade').style.opacity = '0';
   if(autoRot !== ssPrevAutoRot) toggleAutoRot();
@@ -6192,6 +6206,316 @@ window.addEventListener('keydown', e=>{
   else if(e.key==='ArrowLeft') ssAdvance(-1);
   else if(e.key===' '){ e.preventDefault(); ssTogglePause(); }
 });
+
+
+// ================================================================
+// ギャラリー表示（スクリーンセーバーの「複数同時」モード）
+// 3〜5台のモデルを重ならないよう並べ、間隔ごとに1〜2台入れ替え、ときどき台数も変える
+// ================================================================
+const GAL_SIZE  = 100;            // 各モデルを収める大きさ（最大寸法をこの値に正規化）
+const GAL_PITCH = GAL_SIZE*1.35;  // 配置間隔
+let galleryActive = false, galBusy = false;
+let galSlots = [], galBad = new Set(), galLastIdx = -1, galLastT = 0;
+let galCamDist = 400, galCamGoal = 400, galMutex = Promise.resolve();
+
+function toggleSsGallery(){
+  ssGallery = !ssGallery;
+  const b = document.getElementById('btn-ss-gallery');
+  b.textContent = '🪟 表示: '+(ssGallery?'複数同時（3〜5台）':'1モデル');
+  b.classList.toggle('active', ssGallery);
+  saveSettings();
+  if(ssActive) ssSwitchMode();
+}
+// 再生中にモード切替：読み込み中なら完了を待ってから切り替える
+async function ssSwitchMode(){
+  clearTimeout(ssTimer);
+  while(ssBusy || galBusy) await ssSleep(200);
+  if(!ssActive) return;
+  if(galleryActive) galleryStop();
+  ssIndex = -1; ssFails = 0; ssPaused = false;
+  document.getElementById('ss-pause-btn').textContent = '⏸';
+  if(ssGallery) galleryStart(); else ssAdvance(1);
+}
+
+// 配置（ピッチ単位の座標）。台数ごとに重ならない固定レイアウト
+function galLayout(n){
+  switch(n){
+    case 1: return [[0,0]];
+    case 2: return [[-.5,0],[.5,0]];
+    case 3: return [[-1,0],[0,0],[1,0]];
+    case 4: return [[-.5,.5],[.5,.5],[-.5,-.5],[.5,-.5]];
+    default: return [[-1,.5],[0,.5],[1,.5],[-.5,-.5],[.5,-.5]];
+  }
+}
+// その台数が画面に収まるカメラ距離
+function galCamFor(n){
+  const L = galLayout(Math.max(1,Math.min(5,n)));
+  const xs = L.map(q=>q[0]), ys = L.map(q=>q[1]);
+  const W = (Math.max(...xs)-Math.min(...xs))*GAL_PITCH + GAL_SIZE*1.25;
+  const H = (Math.max(...ys)-Math.min(...ys))*GAL_PITCH + GAL_SIZE*1.25;
+  const t = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+  return Math.max(H/2/t, W/2/(t*camera.aspect))*1.08 + GAL_SIZE*0.5;
+}
+function galApplyCamera(){
+  camera.position.set(0, galCamDist*0.08, galCamDist);
+  camera.lookAt(0,0,0);
+}
+
+function galAllParts(){ return galSlots.flatMap(s=>s.parts); }
+function galApplyMaterials(){
+  galAllParts().forEach(p=>{ p.solid.material.dispose(); p.solid.material = makeMat(p.color, curMat, p.map); });
+}
+function galDisposeParts(parts){
+  parts.forEach(p=>{
+    p.solid.geometry.dispose();
+    p.solid.material.dispose();
+    p.wire.material.dispose();
+    if(p.map) p.map.dispose();
+  });
+}
+function galWithLock(fn){
+  const run = galMutex.then(()=>fn());
+  galMutex = run.catch(()=>{});
+  return run;
+}
+
+// 1ファイル分をグローバルのmodelGroup/partMeshesに読み込む（loadFileのUI処理なし版）
+async function loadModelFile(file){
+  const ext = file.name.toLowerCase();
+  const buffer = await file.arrayBuffer();
+  if(ext.endsWith('.zip')){
+    const zf = fflate.unzipSync(new Uint8Array(buffer));
+    const entries = Object.keys(zf).filter(n=>!n.endsWith('/') && /\.(step|stp|stl|3mf|obj|glb)$/i.test(n)).sort();
+    for(const e of entries){
+      try{ await loadSingleCad(e, zf[e]); }catch(err){ console.error('ZIP内読み込み失敗', e, err); }
+    }
+  } else if(/\.(step|stp)$/.test(ext)){
+    if(!occtInst) occtInst = await occtimportjs();
+    loadSTEPBuffer(new Uint8Array(buffer), file.name);
+  } else if(ext.endsWith('.stl')){ loadSTLBuffer(buffer, file.name); }
+  else if(ext.endsWith('.3mf')){ await parse3MF(buffer); }
+  else if(ext.endsWith('.obj')){ loadOBJText(new TextDecoder().decode(buffer), file.name); }
+  else if(ext.endsWith('.glb')){ await loadGLBBuffer(buffer, file.name); }
+  else throw new Error('未対応の形式: '+file.name);
+}
+
+function galCreateSlot(index, pos){
+  const group = new THREE.Group(), inner = new THREE.Group();
+  group.add(inner);
+  group.position.set(pos[0]*GAL_PITCH, pos[1]*GAL_PITCH, 0);
+  group.scale.setScalar(0.0001);
+  group.visible = false;
+  scene.add(group);
+  const slot = {
+    index, group, inner, parts:[], name:'', itemIdx:null,
+    rotF: 0.7+Math.random()*0.7, dir: Math.random()<0.5?1:-1,
+    scaleCur:0.0001, scaleGoal:0, dying:false,
+    target: group.position.clone(),
+  };
+  galSlots.push(slot);
+  return slot;
+}
+function galClearContent(slot){
+  galDisposeParts(slot.parts);
+  slot.parts = [];
+  slot.inner.remove(...slot.inner.children);
+  slot.inner.scale.setScalar(1);
+  slot.inner.position.set(0,0,0);
+}
+function galKill(slot){ slot.dying = true; slot.scaleGoal = 0; }
+
+// まだ表示されていないファイルを1つ選ぶ（ランダム or 並び順）
+function galPickIndex(){
+  const shown = new Set(galSlots.filter(s=>!s.dying && s.itemIdx!==null).map(s=>s.itemIdx));
+  let cand = [];
+  for(let i=0;i<ssList.length;i++) if(!shown.has(i) && !galBad.has(i)) cand.push(i);
+  if(!cand.length) return null;
+  if(ssRandom) return cand[Math.floor(Math.random()*cand.length)];
+  const next = cand.find(i=>i>galLastIdx);
+  galLastIdx = (next===undefined) ? cand[0] : next;
+  return galLastIdx;
+}
+
+// モデルをスロットに読み込んで中心・大きさを正規化する
+async function galLoadInto(slot, item){
+  const prevGroup = modelGroup, prevParts = partMeshes;
+  modelGroup = slot.inner; partMeshes = [];
+  let parts = [];
+  try{
+    await loadModelFile(await item.getFile());
+    parts = partMeshes;
+  } finally { modelGroup = prevGroup; partMeshes = prevParts; }
+  if(!parts.length) return false;
+  const box = new THREE.Box3();
+  parts.forEach(p=>box.union(p.solid.geometry.boundingBox.clone().translate(p.solid.position)));
+  if(box.isEmpty()){ galDisposeParts(parts); slot.inner.remove(...slot.inner.children); return false; }
+  const size = new THREE.Vector3(), center = new THREE.Vector3();
+  box.getSize(size); box.getCenter(center);
+  const s = GAL_SIZE / Math.max(size.x,size.y,size.z,1e-6);
+  slot.inner.scale.setScalar(s);
+  slot.inner.position.copy(center).multiplyScalar(-s);
+  slot.parts = parts;
+  if(curMode==='wire') parts.forEach(p=>{ p.solid.visible=false; });
+  return true;
+}
+async function galFill(slot){
+  for(let attempt=0; attempt<5; attempt++){
+    const idx = galPickIndex();
+    if(idx===null) break;
+    slot.itemIdx = idx;
+    const item = ssList[idx];
+    let ok = false;
+    try{ ok = await galWithLock(()=>galLoadInto(slot, item)); }
+    catch(e){ console.error('ギャラリー: 読み込み失敗', item.name, e); }
+    if(!galleryActive) return false;
+    if(ok){ slot.name = item.name.split('/').pop(); slot.group.rotation.y = Math.random()*Math.PI*2; return true; }
+    galBad.add(idx);
+    galClearContent(slot);
+  }
+  slot.itemIdx = null;
+  return false;
+}
+
+function galUpdateHud(){
+  const alive = galSlots.filter(s=>!s.dying && s.name);
+  document.getElementById('ss-hud-txt').textContent = `${alive.length}台表示中  ${alive.map(s=>s.name).join(' / ')}`;
+}
+
+async function galleryStart(){
+  galleryActive = true; galBusy = true;
+  // 1モデル表示で読み込んでいた内容を片付ける
+  partMeshes.forEach(p=>{ p.solid.geometry.dispose(); p.solid.material.dispose(); p.wire.material.dispose(); if(p.map) p.map.dispose(); });
+  if(modelGroup) scene.remove(modelGroup);
+  modelGroup = new THREE.Group(); scene.add(modelGroup);
+  partMeshes = []; lastDeleted = null;
+  document.getElementById('btn-undo').disabled = true;
+  clearMeasure();
+  gridHelper.visible = false;
+  controls.enabled = false; controls.target.set(0,0,0);
+  holoShared.uScanFreq.value = Math.PI*2*30/GAL_SIZE;
+  holoShared.uBandFreq.value = 1/(GAL_SIZE*1.5);
+  galSlots = []; galBad = new Set(); galLastIdx = -1; galLastT = performance.now();
+  document.getElementById('i-fname').textContent = '（複数表示）';
+  updateModelInfo();
+
+  const maxN = Math.min(5, ssList.length), minN = Math.min(3, maxN);
+  const N = minN + Math.floor(Math.random()*(maxN-minN+1));
+  galCamDist = galCamGoal = galCamFor(N); galApplyCamera();
+  const layout = galLayout(N), fade = document.getElementById('ss-fade');
+  fade.style.background = '#'+new THREE.Color(curBgColor).getHexString();
+  fade.style.opacity = '1';
+  for(let i=0;i<N;i++){
+    const slot = galCreateSlot(i, layout[i]);
+    const ok = await galFill(slot);
+    if(!galleryActive) return;
+    if(ok){ slot.scaleGoal = 1; fade.style.opacity = '0'; } else galKill(slot);
+  }
+  fade.style.opacity = '0';
+  if(!galSlots.some(s=>!s.dying)){
+    galBusy = false; ssStop();
+    setStatus('error','❌ フォルダ内のファイルを1つも読み込めませんでした');
+    return;
+  }
+  galUpdateHud();
+  galBusy = false;
+  if(!ssPaused) ssSchedule(ssInterval*60000);
+}
+
+function galleryStop(){
+  galleryActive = false; galBusy = false;
+  galSlots.forEach(s=>{ galDisposeParts(s.parts); scene.remove(s.group); });
+  galSlots = [];
+  gridHelper.visible = true; gridHelper.position.y = 0;
+  controls.enabled = true;
+  // modelGroup / partMeshes は galleryStart で作った空のものがそのまま有効（読み込み途中の入れ替え復帰とも競合しない）
+  document.getElementById('i-fname').textContent = '—';
+  updateModelInfo();
+  // 空のモデルに対してfitCameraすると座標が壊れるため、既定の視点に戻す
+  camera.position.set(200,150,200);
+  controls.target.set(0,0,0);
+  controls.update();
+}
+
+// 間隔ごとの入れ替え：台数変更 or 1〜2台の入れ替え
+async function galTick(){
+  if(!galleryActive || galBusy) return;
+  galBusy = true;
+  clearTimeout(ssTimer);
+  try{
+    const alive = galSlots.filter(s=>!s.dying);
+    const maxN = Math.min(5, ssList.length), minN = Math.min(3, maxN);
+    let newN = alive.length;
+    if(maxN>minN && Math.random()<0.4){
+      let c; do{ c = minN + Math.floor(Math.random()*(maxN-minN+1)); }while(c===newN);
+      newN = c;
+    }
+    if(newN !== alive.length) await galResize(newN);
+    else await galReplace();
+  }catch(e){ console.error('ギャラリー入れ替え失敗', e); }
+  if(!galleryActive) return;
+  galUpdateHud();
+  galBusy = false;
+  if(!ssPaused) ssSchedule(ssInterval*60000);
+}
+
+async function galReplace(){
+  const alive = galSlots.filter(s=>!s.dying);
+  if(ssList.length <= alive.length) return;   // 入れ替え候補がない
+  const k = (alive.length>=2 && Math.random()<0.4) ? 2 : 1;
+  const targets = alive.slice().sort(()=>Math.random()-0.5).slice(0,k);
+  targets.forEach(s=>{ s.scaleGoal = 0; });
+  await ssSleep(900);
+  if(!galleryActive) return;
+  for(const s of targets){
+    galClearContent(s); s.itemIdx = null; s.name = '';
+    const ok = await galFill(s);
+    if(!galleryActive) return;
+    if(!ok) galKill(s);
+  }
+  targets.forEach(s=>{ if(!s.dying) s.scaleGoal = 1; });   // 同時に出現
+}
+
+async function galResize(newN){
+  const layout = galLayout(newN);
+  const alive = galSlots.filter(s=>!s.dying);
+  alive.forEach(s=>{
+    if(s.index >= newN) galKill(s);
+    else s.target.set(layout[s.index][0]*GAL_PITCH, layout[s.index][1]*GAL_PITCH, 0);
+  });
+  galCamGoal = galCamFor(newN);
+  const have = new Set(alive.filter(s=>s.index<newN).map(s=>s.index));
+  const fresh = [];
+  for(let i=0;i<newN;i++){
+    if(have.has(i)) continue;
+    const s = galCreateSlot(i, layout[i]);
+    const ok = await galFill(s);
+    if(!galleryActive) return;
+    if(ok) fresh.push(s); else galKill(s);
+  }
+  await ssSleep(500);
+  fresh.forEach(s=>{ s.scaleGoal = 1; });
+}
+
+// 毎フレーム：拡大縮小アニメ、移動、自転、カメラ距離
+function galUpdate(){
+  const now = performance.now();
+  const dt = Math.min(0.1, (now-galLastT)/1000); galLastT = now;
+  const ease = Math.min(1, dt*5);
+  for(let i=galSlots.length-1;i>=0;i--){
+    const s = galSlots[i];
+    s.scaleCur += (s.scaleGoal - s.scaleCur)*ease;
+    s.group.scale.setScalar(Math.max(s.scaleCur, 0.0001));
+    s.group.visible = s.scaleCur > 0.01;
+    s.group.position.lerp(s.target, Math.min(1, dt*3));
+    s.group.rotation.y += rotSpeed*s.rotF*s.dir*dt*60;
+    if(s.dying && s.scaleCur < 0.01){
+      galDisposeParts(s.parts); scene.remove(s.group);
+      galSlots.splice(i,1);
+    }
+  }
+  galCamDist += (galCamGoal - galCamDist)*Math.min(1, dt*3);
+  galApplyCamera();
+}
 
 function toggleInfo(){
   infoVisible=!infoVisible;
@@ -6360,7 +6684,8 @@ function animate(){
   requestAnimationFrame(animate);
   controls.update(); // dampingに必要
   if(curMat==='holo') holoShared.uTime.value = performance.now()/1000;
-  if(autoRot && modelGroup) rotateModelAroundCenter(rotSpeed);
+  if(galleryActive) galUpdate();
+  else if(autoRot && modelGroup) rotateModelAroundCenter(rotSpeed);
   updateMeasureLabelPos();
   renderer.render(scene,camera);
   drawAxis();
