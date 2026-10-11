@@ -4654,8 +4654,9 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.10.0';
+const APP_VERSION = 'v1.10.1';
 // --- 変更履歴 ---
+// v1.10.1: 分解ビューが全パーツを同じ方向へ動かすだけで分解されない不具合を修正（各パーツの中心をジオメトリから算出し、モデル中心から放射状に移動。距離はモデルの大きさ基準）
 // v1.10.0: スクリーンセーバーに「複数同時表示（ギャラリー）」モードを追加。1モデル表示と切替可能。
 //          3〜5台を重ならないよう配置し、間隔ごとに1〜2台入れ替え、ときどき台数も変化
 // v1.9.0: スクリーンセーバー機能（フォルダ選択→全画面＋自動回転→1/3/5/10分ごとに切替、順番/ランダム、前回フォルダの記憶、画面スリープ防止）。
@@ -5779,20 +5780,38 @@ document.getElementById('clip-range').addEventListener('input', e=>{
 // ================================================================
 // EXPLODE VIEW
 // ================================================================
+// 各パーツのジオメトリは読み込み時に座標へ焼き込み済み（mesh.positionは0）のため、
+// 「パーツ自身の中心」はジオメトリのバウンディングボックスから求める必要がある
+function explodePartCenter(p){
+  const bb = p.solid.geometry.boundingBox || (p.solid.geometry.computeBoundingBox(), p.solid.geometry.boundingBox);
+  return bb.getCenter(new THREE.Vector3()).add(p.origPos);
+}
+function applyExplode(factor){
+  if(!partMeshes.length) return;
+  // 分解前の状態でのモデル全体の中心と大きさ（分解の動きに影響されないよう origPos 基準で計算）
+  const all = new THREE.Box3();
+  partMeshes.forEach(p=>{
+    const bb = p.solid.geometry.boundingBox || (p.solid.geometry.computeBoundingBox(), p.solid.geometry.boundingBox);
+    all.union(bb.clone().translate(p.origPos));
+  });
+  const center = all.getCenter(new THREE.Vector3());
+  const size = all.getSize(new THREE.Vector3());
+  const dist = Math.max(size.x, size.y, size.z) * 0.5 * factor;   // 分解レベル2.0でモデル全体の大きさ分だけ離れる
+  const multi = partMeshes.length > 1;
+  partMeshes.forEach(p=>{
+    const dir = explodePartCenter(p).sub(center);
+    if(dir.lengthSq() < 1e-9) dir.set(0,1,0); else dir.normalize();
+    const newPos = p.origPos.clone();
+    if(multi) newPos.addScaledVector(dir, dist);   // パーツが1つだけの場合は動かさない
+    p.solid.position.copy(newPos);
+    p.wire.position.copy(newPos);
+  });
+}
 document.getElementById('explode-range').addEventListener('input', e=>{
   if(!modelGroup) return;
   const factor = parseFloat(e.target.value);
   document.getElementById('explode-val').textContent = factor.toFixed(2);
-  const box = new THREE.Box3().setFromObject(modelGroup);
-  const center = new THREE.Vector3(); box.getCenter(center);
-  partMeshes.forEach(p=>{
-    const orig = p.origPos;
-    const dir  = orig.clone().sub(center).normalize();
-    if(dir.length()<0.001) dir.set(0,1,0);
-    const newPos = orig.clone().addScaledVector(dir, factor * 80);
-    p.solid.position.copy(newPos);
-    p.wire.position.copy(newPos);
-  });
+  applyExplode(factor);
 });
 
 // ================================================================
