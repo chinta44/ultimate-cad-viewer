@@ -177,6 +177,27 @@ body.ui-clear #sidebar, body.ui-clear #info-ov, body.ui-clear #ss-hud{
   text-shadow:0 0 3px rgba(0,0,0,.95),0 1px 2px rgba(0,0,0,.9);
 }
 body.ui-clear #sidebar-header, body.ui-clear #statusbar{ border-color:rgba(255,255,255,.14); }
+/* 自前の背景を持つボタン類は縁取りを付けない（「ファイルを開く」の文字が滲むため） */
+body.ui-clear .btn, body.ui-clear #open-btn, body.ui-clear #ss-hud .ss-b, body.ui-clear .part-item{ text-shadow:none; }
+
+/* パネルが透明なときは、ボタン等の操作部品以外のタッチ/クリックを下の3D画面へ通す（ピンチ拡大・回転ができるように） */
+body.ui-clear #sidebar, body.ui-clear #sidebar-header, body.ui-clear #sidebar-body,
+body.ui-clear #statusbar, body.ui-clear #info-ov, body.ui-clear .sec{ pointer-events:none; }
+body.ui-clear #sidebar button, body.ui-clear #sidebar input, body.ui-clear #sidebar select,
+body.ui-clear #sidebar label, body.ui-clear #sidebar .swatch, body.ui-clear #sidebar .part-item,
+body.ui-clear #sidebar .info-row.clickable{ pointer-events:auto; }
+
+/* メニュー表示切替ボタン */
+#menu-toggle{
+  position:fixed;top:12px;left:282px;z-index:120;width:38px;height:38px;
+  background:rgba(18,22,32,.55);border:1px solid var(--border);border-radius:10px;
+  color:var(--text);font-size:18px;cursor:pointer;backdrop-filter:blur(8px);
+  transition:opacity .35s ease;
+}
+#menu-toggle:hover{background:rgba(0,212,255,.25);}
+body.menu-hidden #sidebar{display:none;}
+body.menu-hidden #menu-toggle{left:12px;}
+body.fs-hide-ui #menu-toggle{opacity:0;pointer-events:none;}
 
 /* 全画面表示中の無操作オートハイド */
 #sidebar, #hint, #info-ov{ transition: opacity .35s ease, transform .35s ease; }
@@ -215,6 +236,8 @@ body.dragging #drop-overlay{display:flex;}
   #sidebar{width:100%;height:50%;top:auto;bottom:0;border-right:none;border-top:1px solid var(--border);}
   #hint{bottom:calc(50% + 14px);}
   #axis-canvas{bottom:calc(50% + 14px);}
+  #menu-toggle{left:12px;}
+  body.menu-hidden #hint, body.menu-hidden #axis-canvas{bottom:14px;}
 }
 </style>
 </head>
@@ -258,6 +281,8 @@ body.dragging #drop-overlay{display:flex;}
 
 <!-- Axis canvas -->
 <canvas id="axis-canvas" width="80" height="80"></canvas>
+
+<button id="menu-toggle" onclick="toggleMenu()" title="メニューの表示/非表示">☰</button>
 
 <!-- Hint -->
 <div id="hint">ドラッグ:回転　ホイール:ズーム　右ドラッグ:パン</div>
@@ -4665,8 +4690,9 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.10.2';
+const APP_VERSION = 'v1.10.3';
 // --- 変更履歴 ---
+// v1.10.3: 透明パネル時に「ファイルを開く」等のボタン文字が滲む問題を修正 / 透明パネル時、ボタン以外のタッチを3D画面へ通過させピンチ・回転を可能に / メニュー表示切替ボタン(☰)を追加
 // v1.10.2: サイドバー・モデル情報・操作バーの背景を透明にでき、濃さをスライダーで調整可能に（初期値は透明。透明時は文字に縁取りを付与）
 // v1.10.1: 分解ビューが全パーツを同じ方向へ動かすだけで分解されない不具合を修正（各パーツの中心をジオメトリから算出し、モデル中心から放射状に移動。距離はモデルの大きさ基準）
 // v1.10.0: スクリーンセーバーに「複数同時表示（ギャラリー）」モードを追加。1モデル表示と切替可能。
@@ -5969,6 +5995,10 @@ function setView(v){
   controls.update();
 }
 
+function toggleMenu(){
+  document.body.classList.toggle('menu-hidden');
+  window.dispatchEvent(new Event('resize'));
+}
 function toggleAutoRot(){
   autoRot=!autoRot;
   document.getElementById('btn-rot').classList.toggle('active',autoRot);
