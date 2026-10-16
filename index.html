@@ -206,7 +206,7 @@ body.ui-clear #sidebar .info-row.clickable{ pointer-events:auto; }
   padding:6px 12px;font-size:11px;color:var(--text);pointer-events:none;
 }
 body.icon-ui #iconbar{display:flex;}
-body.icon-ui #status-toast.show{display:block;}
+body.icon-ui #status-toast.show, body.fs-hide-ui #status-toast.show{display:block;}
 body.icon-ui #hint{display:none;}
 body.icon-ui #axis-canvas{bottom:66px;}
 body.icon-ui.menu-hidden #axis-canvas{bottom:14px;}
@@ -556,6 +556,7 @@ body.dragging #drop-overlay{display:flex;}
         <input type="range" id="panel-a-range" min="0" max="100" step="1" value="0">
       </div>
       <button class="btn" id="btn-uimode" onclick="cycleUiMode()">📱 メニュー表示: 自動</button>
+      <button class="btn" id="btn-autohide" onclick="toggleAutoHide()">🫥 パネル自動非表示（PC）: ON</button>
       <button class="btn active" id="btn-info" onclick="toggleInfo()">ℹ モデル情報</button>
       <button class="btn" onclick="screenshot()">📷 スクリーンショット</button>
       <button class="btn" id="btn-fullscreen" onclick="toggleFullscreen()">⛶ 全画面表示</button>
@@ -4782,8 +4783,10 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.11.0';
+const APP_VERSION = 'v1.12.0';
 // --- 変更履歴 ---
+// v1.12.0: PC表示で、5秒間マウス操作がないとき / 何もない所をクリックしたときにパネルを隠す（モデル上のクリックは従来どおり距離計測）。
+//          クリックで隠した後はサイドバー側へマウスを寄せる・キー入力・もう一度クリックで再表示。「その他」でON/OFF可（既定ON）
 // v1.11.0: 向き調整（X/Y/Z ±90°・上下反転・Z-up→Y-up・元に戻す）と、ファイルごとの向き保存（自動適用、JSON書き出し/読み込み）。
 //          スマホ向けアイコンメニュー（下部アイコンバー＋機能別パネル、メニュー表示は 自動/アイコン/従来 を切替可）
 // v1.10.3: 透明パネル時に「ファイルを開く」等のボタン文字が滲む問題を修正 / 透明パネル時、ボタン以外のタッチを3D画面へ通過させピンチ・回転を可能に / メニュー表示切替ボタン(☰)を追加
@@ -4833,6 +4836,9 @@ let ssInterval = 3;       // スクリーンセーバーの切替間隔（分）
 let ssRandom   = false;   // ランダム順か
 let uiMode = 'auto';      // 'auto'=狭い画面でアイコンメニュー / 'icon'=常にアイコン / 'classic'=従来のサイドバー
 let curCat = null, toastTimer = null;
+let autoHidePanels = true;   // PC：無操作 / 何もない所をクリックでパネルを隠す
+let uiClickHidden = false;   // クリックで隠している状態（マウスを動かしても勝手に再表示しない）
+var autoHideReady = false;
 let curFileKey = null, curOrient = new THREE.Quaternion(), orientDB = {};
 let panelAlpha = 0;       // サイドバー/情報パネル等の背景の濃さ（0〜1、0で透明）
 let ssGallery  = false;   // true=複数同時表示（ギャラリー）、false=1モデル表示
@@ -4845,7 +4851,7 @@ const SETTINGS_KEY = 'ultimateCadViewerSettings_v1';
 function saveSettings(){
   try{
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor, rotSpeed: rotSpeed, ssInterval: ssInterval, ssRandom: ssRandom, ssGallery: ssGallery, panelAlpha: panelAlpha, uiMode: uiMode
+      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor, rotSpeed: rotSpeed, ssInterval: ssInterval, ssRandom: ssRandom, ssGallery: ssGallery, panelAlpha: panelAlpha, uiMode: uiMode, autoHidePanels: autoHidePanels
     }));
   }catch(e){ /* localStorageが使えない環境では無視 */ }
 }
@@ -4864,6 +4870,7 @@ function loadSettings(){
     if(typeof s.ssRandom==='boolean') ssRandom = s.ssRandom;
     if(typeof s.ssGallery==='boolean') ssGallery = s.ssGallery;
     if(['auto','icon','classic'].includes(s.uiMode)) uiMode = s.uiMode;
+    if(typeof s.autoHidePanels==='boolean') autoHidePanels = s.autoHidePanels;
     if(typeof s.panelAlpha==='number' && s.panelAlpha>=0 && s.panelAlpha<=1) panelAlpha = s.panelAlpha;
   }catch(e){ /* 無視 */ }
 }
@@ -4896,6 +4903,8 @@ function applyPanelAlpha(a){
 document.getElementById('panel-a-range').value = Math.round(panelAlpha*100);
 applyPanelAlpha(panelAlpha);
 updateUiMode();
+document.getElementById('btn-autohide').textContent = '🫥 パネル自動非表示（PC）: '+(autoHidePanels?'ON':'OFF');
+document.getElementById('btn-autohide').classList.toggle('active', autoHidePanels);
 document.getElementById('panel-a-range').addEventListener('input', e=>{
   applyPanelAlpha(parseInt(e.target.value)/100);
   saveSettings();
@@ -6137,23 +6146,65 @@ function syncFullscreenButton(){
 }
 
 // 全画面表示中、数秒操作がなければサイドバー等を自動で隠し、画面タップ等で再表示する
-const FS_HIDE_DELAY = 3000;
+const FS_HIDE_DELAY = 3000;   // 全画面・スクリーンセーバー中
+const PC_HIDE_DELAY = 5000;   // 通常表示（PC）
 let fsHideTimer = null;
 function isFullscreenNow(){
   return !!(document.fullscreenElement || document.webkitFullscreenElement);
 }
+function pcAutoHideOn(){ return autoHidePanels && !document.body.classList.contains('icon-ui'); }
+function idleHideOn(){ return isFullscreenNow() || ssActive || pcAutoHideOn(); }
 function scheduleFsHide(){
   clearTimeout(fsHideTimer);
-  if(!isFullscreenNow() && !ssActive) return;
-  fsHideTimer = setTimeout(()=>{ document.body.classList.add('fs-hide-ui'); }, FS_HIDE_DELAY);
+  if(!idleHideOn()) return;
+  const delay = (isFullscreenNow() || ssActive) ? FS_HIDE_DELAY : PC_HIDE_DELAY;
+  fsHideTimer = setTimeout(()=>{ document.body.classList.add('fs-hide-ui'); }, delay);
 }
 function showFsUI(){
+  uiClickHidden = false;
+  document.body.classList.remove('fs-hide-ui');
+  scheduleFsHide();
+}
+// 設定変更・画面モード変更時に、無操作タイマーと表示状態を作り直す
+function refreshAutoHide(){
+  clearTimeout(fsHideTimer);
+  uiClickHidden = false;
   document.body.classList.remove('fs-hide-ui');
   scheduleFsHide();
 }
 ['pointerdown','pointermove','touchstart','wheel','keydown'].forEach(evt=>{
-  window.addEventListener(evt, ()=>{ if(isFullscreenNow() || ssActive) showFsUI(); }, {passive:true});
+  window.addEventListener(evt, e=>{
+    if(!idleHideOn()) return;
+    if(uiClickHidden){
+      // クリックで隠している間は、サイドバー側へマウスを寄せる / キー入力で再表示（微小な動きでは戻さない）
+      const nearSide = e.type==='pointermove' && e.clientX < 290 && !document.body.classList.contains('menu-hidden');
+      if(nearSide || e.type==='keydown') showFsUI();
+      return;
+    }
+    showFsUI();
+  }, {passive:true});
 });
+// 何もない所（モデル以外）を左クリック → パネルを隠す / もう一度クリックで再表示（通常表示のPCのみ）
+renderer.domElement.addEventListener('pointerup', e=>{
+  if(e.button!==0 || !_pointerDownPos) return;
+  if(Math.hypot(e.clientX-_pointerDownPos.x, e.clientY-_pointerDownPos.y) > 5) return;   // ドラッグ（回転）は除外
+  if(!pcAutoHideOn() || isFullscreenNow() || ssActive) return;
+  mouseVec.x =  (e.clientX/innerWidth)*2-1;
+  mouseVec.y = -(e.clientY/innerHeight)*2+1;
+  raycaster.setFromCamera(mouseVec, camera);
+  const targets = partMeshes.map(p=>p.solid).filter(m=>m.visible);
+  if(targets.length && raycaster.intersectObjects(targets, true).length) return;          // モデル上のクリックは距離計測用
+  if(uiClickHidden){ showFsUI(); }
+  else { uiClickHidden = true; clearTimeout(fsHideTimer); document.body.classList.add('fs-hide-ui'); }
+});
+function toggleAutoHide(){
+  autoHidePanels = !autoHidePanels;
+  const b = document.getElementById('btn-autohide');
+  b.textContent = '🫥 パネル自動非表示（PC）: '+(autoHidePanels?'ON':'OFF');
+  b.classList.toggle('active', autoHidePanels);
+  saveSettings();
+  refreshAutoHide();
+}
 function onFullscreenChange(){
   syncFullscreenButton();
   if(ssActive){
@@ -6164,7 +6215,7 @@ function onFullscreenChange(){
     return;
   }
   if(isFullscreenNow()) showFsUI();
-  else { clearTimeout(fsHideTimer); document.body.classList.remove('fs-hide-ui'); }
+  else refreshAutoHide();
 }
 document.addEventListener('fullscreenchange', onFullscreenChange);
 document.addEventListener('webkitfullscreenchange', onFullscreenChange);
@@ -6381,7 +6432,7 @@ function ssStop(){
     const exit = document.exitFullscreen || document.webkitExitFullscreen;
     if(exit) exit.call(document);
   }
-  if(!isFullscreenNow()){ clearTimeout(fsHideTimer); document.body.classList.remove('fs-hide-ui'); }
+  if(!isFullscreenNow()) refreshAutoHide();
   setStatus('muted','スクリーンセーバーを終了しました');
 }
 window.addEventListener('keydown', e=>{
@@ -6819,6 +6870,7 @@ function updateUiMode(){
   applyPanelAlpha(panelAlpha);
   const label = {auto:'自動（狭い画面でアイコン）', icon:'アイコン', classic:'従来'}[uiMode];
   document.getElementById('btn-uimode').textContent = '📱 メニュー表示: '+label;
+  if(autoHideReady) refreshAutoHide();
 }
 function cycleUiMode(){
   uiMode = {auto:'icon', icon:'classic', classic:'auto'}[uiMode];
@@ -7021,6 +7073,9 @@ function animate(){
   renderer.render(scene,camera);
   drawAxis();
 }
+// 無操作タイマーはスクリーンセーバー等の変数が定義された後（ここ）で開始する
+autoHideReady = true;
+refreshAutoHide();
 animate();
 </script>
 </body>
