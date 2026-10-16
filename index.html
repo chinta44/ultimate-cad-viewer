@@ -187,6 +187,45 @@ body.ui-clear #sidebar button, body.ui-clear #sidebar input, body.ui-clear #side
 body.ui-clear #sidebar label, body.ui-clear #sidebar .swatch, body.ui-clear #sidebar .part-item,
 body.ui-clear #sidebar .info-row.clickable{ pointer-events:auto; }
 
+/* ===== アイコンメニュー（icon-ui：スマホ幅で自動 / 設定で強制切替） ===== */
+#iconbar{
+  display:none;position:fixed;left:0;right:0;bottom:0;height:56px;z-index:110;
+  background:rgba(14,17,24,.94);border-top:1px solid var(--border);backdrop-filter:blur(10px);
+  overflow-x:auto;gap:2px;padding:4px 6px;align-items:stretch;transition:opacity .35s ease;
+}
+#iconbar::-webkit-scrollbar{display:none;}
+.ib{
+  flex:0 0 auto;min-width:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  background:none;border:none;color:var(--text);border-radius:10px;cursor:pointer;padding:2px 6px;font-family:inherit;
+}
+.ib .ic{font-size:20px;line-height:1;} .ib .il{font-size:9px;color:var(--muted);white-space:nowrap;}
+.ib.active{background:rgba(0,212,255,.18);} .ib.active .il{color:var(--accent);}
+#status-toast{
+  display:none;position:fixed;top:58px;left:50%;transform:translateX(-50%);z-index:115;max-width:90vw;
+  background:rgba(14,17,24,.9);border:1px solid var(--border);border-radius:10px;
+  padding:6px 12px;font-size:11px;color:var(--text);pointer-events:none;
+}
+body.icon-ui #iconbar{display:flex;}
+body.icon-ui #status-toast.show{display:block;}
+body.icon-ui #hint{display:none;}
+body.icon-ui #axis-canvas{bottom:66px;}
+body.icon-ui.menu-hidden #axis-canvas{bottom:14px;}
+body.icon-ui #menu-toggle{left:12px;}
+body.icon-ui.menu-hidden #iconbar{display:none;}
+body.icon-ui #sidebar{
+  display:none;left:0;right:0;width:100%;top:auto;bottom:56px;height:auto;max-height:46vh;
+  border-right:none;border-top:1px solid var(--border);border-radius:14px 14px 0 0;
+  background:rgba(18,22,32,.94);backdrop-filter:blur(12px);pointer-events:auto;
+}
+body.icon-ui.cat-open #sidebar{display:flex;}
+body.icon-ui #sidebar-header{display:none;}
+body.icon-ui[data-cat="misc"] #sidebar-header{display:block;}
+body.icon-ui #sidebar-body > #open-btn{display:none;}
+body.icon-ui .sec{display:none;}
+body.icon-ui .sec.show{display:block;}
+body.icon-ui #statusbar{display:none;}
+body.fs-hide-ui #iconbar{opacity:0;pointer-events:none;}
+
 /* メニュー表示切替ボタン */
 #menu-toggle{
   position:fixed;top:12px;left:282px;z-index:120;width:38px;height:38px;
@@ -287,6 +326,20 @@ body.dragging #drop-overlay{display:flex;}
 <!-- Hint -->
 <div id="hint">ドラッグ:回転　ホイール:ズーム　右ドラッグ:パン</div>
 
+<!-- アイコンメニュー（スマホ向け：アイコンを押すとその機能のパネルを表示） -->
+<div id="status-toast"></div>
+<div id="iconbar">
+  <label class="ib" for="file-in" title="ファイルを開く"><span class="ic">📂</span><span class="il">開く</span></label>
+  <button class="ib" data-cat="look"    onclick="openCat('look')"><span class="ic">🎨</span><span class="il">見た目</span></button>
+  <button class="ib" data-cat="view"    onclick="openCat('view')"><span class="ic">🧭</span><span class="il">視点・向き</span></button>
+  <button class="ib" data-cat="cut"     onclick="openCat('cut')"><span class="ic">✂️</span><span class="il">断面・分解</span></button>
+  <button class="ib" data-cat="measure" onclick="openCat('measure')"><span class="ic">📐</span><span class="il">計測</span></button>
+  <button class="ib" data-cat="parts"   onclick="openCat('parts')"><span class="ic">🧩</span><span class="il">パーツ</span></button>
+  <button class="ib" data-cat="ss"      onclick="openCat('ss')"><span class="ic">🖼️</span><span class="il">セーバー</span></button>
+  <button class="ib" data-cat="cmp"     onclick="openCat('cmp')"><span class="ic">🔍</span><span class="il">比較</span></button>
+  <button class="ib" data-cat="misc"    onclick="openCat('misc')"><span class="ic">⚙️</span><span class="il">その他</span></button>
+</div>
+
 <!-- SIDEBAR -->
 <div id="sidebar">
   <div id="sidebar-header">
@@ -300,7 +353,7 @@ body.dragging #drop-overlay{display:flex;}
     <input type="file" id="file-in" accept=".step,.stp,.stl,.3mf,.obj,.glb,.zip" style="display:none">
 
     <!-- View mode -->
-    <div class="sec">
+    <div class="sec" data-cat="look">
       <div class="sec-title">表示モード</div>
       <div class="btn-row btn-row3">
         <button class="btn active" id="m-solid"  onclick="setMode('solid')">🟧 ソリッド</button>
@@ -310,7 +363,7 @@ body.dragging #drop-overlay{display:flex;}
     </div>
 
     <!-- Material -->
-    <div class="sec">
+    <div class="sec" data-cat="look">
       <div class="sec-title">質感プリセット</div>
       <div class="btn-row btn-row3">
         <button class="btn active" id="mat-normal" onclick="setMat('normal')">通常</button>
@@ -321,7 +374,7 @@ body.dragging #drop-overlay{display:flex;}
     </div>
 
     <!-- Color -->
-    <div class="sec">
+    <div class="sec" data-cat="look">
       <div class="sec-title">カラー</div>
       <div class="swatch-row" id="swatch-row">
         <div class="swatch active" style="background:#ff7b2c" onclick="setColor(0xff7b2c,this)"></div>
@@ -336,7 +389,7 @@ body.dragging #drop-overlay{display:flex;}
     </div>
 
     <!-- Background color -->
-    <div class="sec">
+    <div class="sec" data-cat="look">
       <div class="sec-title">背景色</div>
       <div class="swatch-row" id="bg-swatch-row">
         <div class="swatch active" data-color="0x0d0f14" style="background:#0d0f14" onclick="setBgColor(0x0d0f14,this)"></div>
@@ -350,7 +403,7 @@ body.dragging #drop-overlay{display:flex;}
     </div>
 
     <!-- Clipping -->
-    <div class="sec">
+    <div class="sec" data-cat="cut">
       <div class="sec-title">断面表示</div>
       <div class="tab-row">
         <button class="tab active" id="clip-x-tab" onclick="setClipAxis('x')">X軸</button>
@@ -365,7 +418,7 @@ body.dragging #drop-overlay{display:flex;}
     </div>
 
     <!-- Explode -->
-    <div class="sec">
+    <div class="sec" data-cat="cut">
       <div class="sec-title">分解ビュー</div>
       <div class="slider-wrap">
         <div class="slider-label"><span>分解レベル</span><span id="explode-val">0</span></div>
@@ -374,14 +427,14 @@ body.dragging #drop-overlay{display:flex;}
     </div>
 
     <!-- Measure -->
-    <div class="sec">
+    <div class="sec" data-cat="measure">
       <div class="sec-title">距離計測</div>
       <div class="measure-box" id="measure-out">モデル上の2点をクリック</div>
       <button class="btn danger" onclick="clearMeasure()">✕ 計測リセット</button>
     </div>
 
     <!-- Parts list -->
-    <div class="sec">
+    <div class="sec" data-cat="parts">
       <div class="sec-title">パーツ一覧</div>
       <div id="parts-list"><div style="font-size:10px;color:var(--muted);text-align:center;padding:8px 0;">ファイルを読み込むとパーツが表示されます</div></div>
       <div class="btn-row" style="margin-top:6px;">
@@ -392,7 +445,7 @@ body.dragging #drop-overlay{display:flex;}
     </div>
 
     <!-- Volume / Weight / Cost -->
-    <div class="sec">
+    <div class="sec" data-cat="measure">
       <div class="sec-title">体積・重量・材料費 概算</div>
       <div class="btn-row btn-row3" id="density-row">
         <button class="btn active" data-density="1.24" onclick="setDensity(1.24,this)">PLA</button>
@@ -410,7 +463,7 @@ body.dragging #drop-overlay{display:flex;}
     </div>
 
     <!-- Screensaver -->
-    <div class="sec">
+    <div class="sec" data-cat="ss">
       <div class="sec-title">スクリーンセーバー</div>
       <div class="btn-row btn-row4" id="ss-interval-row">
         <button class="btn" data-min="1"  onclick="setSsInterval(1,this)">1分</button>
@@ -429,7 +482,7 @@ body.dragging #drop-overlay{display:flex;}
     </div>
 
     <!-- Compare mode -->
-    <div class="sec">
+    <div class="sec" data-cat="cmp">
       <div class="sec-title">2ファイル比較モード</div>
       <label id="open-btn" for="compare-file-in" style="background:rgba(255,255,255,.08);color:var(--text);">🔍 比較用ファイルを追加</label>
       <input type="file" id="compare-file-in" accept=".step,.stp,.stl,.3mf,.obj,.glb,.zip" style="display:none">
@@ -443,12 +496,8 @@ body.dragging #drop-overlay{display:flex;}
     </div>
 
     <!-- View controls -->
-    <div class="sec">
-      <div class="sec-title">視点・その他</div>
-      <div class="slider-wrap">
-        <div class="slider-label"><span>パネル背景の濃さ（0=透明）</span><span id="panel-a-val">0</span></div>
-        <input type="range" id="panel-a-range" min="0" max="100" step="1" value="0">
-      </div>
+    <div class="sec" data-cat="view">
+      <div class="sec-title">視点</div>
       <div class="btn-row btn-row3">
         <button class="btn" onclick="setView('front')">正面</button>
         <button class="btn" onclick="setView('top')">上面</button>
@@ -464,6 +513,49 @@ body.dragging #drop-overlay{display:flex;}
         <button class="btn active" data-speed="0.01" onclick="setRotSpeed(0.01,this)">普通</button>
         <button class="btn" data-speed="0.02" onclick="setRotSpeed(0.02,this)">速い</button>
       </div>
+    </div>
+
+    <!-- Orientation -->
+    <div class="sec" data-cat="view">
+      <div class="sec-title">向き調整（ファイルごとに保存可）</div>
+      <div class="btn-row btn-row3">
+        <button class="btn" onclick="orientRotate('x',90)">X +90°</button>
+        <button class="btn" onclick="orientRotate('y',90)">Y +90°</button>
+        <button class="btn" onclick="orientRotate('z',90)">Z +90°</button>
+      </div>
+      <div class="btn-row btn-row3">
+        <button class="btn" onclick="orientRotate('x',-90)">X −90°</button>
+        <button class="btn" onclick="orientRotate('y',-90)">Y −90°</button>
+        <button class="btn" onclick="orientRotate('z',-90)">Z −90°</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="orientFlip()">↕ 上下反転</button>
+        <button class="btn" onclick="orientZup()">⬆ Z-up→Y-up</button>
+      </div>
+      <button class="btn" onclick="orientReset()">↺ 向きを元に戻す</button>
+      <div class="btn-row">
+        <button class="btn" onclick="orientSave()">💾 この向きを保存</button>
+        <button class="btn danger" onclick="orientForget()">🗑 保存を削除</button>
+      </div>
+      <div class="info-row"><span class="info-l">状態</span><span class="info-v" id="orient-state">—</span></div>
+      <div class="btn-row">
+        <button class="btn" onclick="orientExport()">📤 設定を書き出し</button>
+        <button class="btn" onclick="document.getElementById('orient-json-in').click()">📥 設定を読み込み</button>
+      </div>
+      <input type="file" id="orient-json-in" accept=".json,application/json" style="display:none">
+      <p style="font-size:9.5px;color:var(--muted);margin-top:4px;line-height:1.4;">
+        保存した向きは「ファイル名＋サイズ」で記憶し、次回から自動で適用します（このブラウザ内のみ。別端末へは書き出し/読み込みで移せます）
+      </p>
+    </div>
+
+    <!-- Misc -->
+    <div class="sec" data-cat="misc">
+      <div class="sec-title">その他</div>
+      <div class="slider-wrap">
+        <div class="slider-label"><span>パネル背景の濃さ（0=透明）</span><span id="panel-a-val">0</span></div>
+        <input type="range" id="panel-a-range" min="0" max="100" step="1" value="0">
+      </div>
+      <button class="btn" id="btn-uimode" onclick="cycleUiMode()">📱 メニュー表示: 自動</button>
       <button class="btn active" id="btn-info" onclick="toggleInfo()">ℹ モデル情報</button>
       <button class="btn" onclick="screenshot()">📷 スクリーンショット</button>
       <button class="btn" id="btn-fullscreen" onclick="toggleFullscreen()">⛶ 全画面表示</button>
@@ -4690,8 +4782,10 @@ window.addEventListener('resize',()=>{
 // ================================================================
 // STATE
 // ================================================================
-const APP_VERSION = 'v1.10.3';
+const APP_VERSION = 'v1.11.0';
 // --- 変更履歴 ---
+// v1.11.0: 向き調整（X/Y/Z ±90°・上下反転・Z-up→Y-up・元に戻す）と、ファイルごとの向き保存（自動適用、JSON書き出し/読み込み）。
+//          スマホ向けアイコンメニュー（下部アイコンバー＋機能別パネル、メニュー表示は 自動/アイコン/従来 を切替可）
 // v1.10.3: 透明パネル時に「ファイルを開く」等のボタン文字が滲む問題を修正 / 透明パネル時、ボタン以外のタッチを3D画面へ通過させピンチ・回転を可能に / メニュー表示切替ボタン(☰)を追加
 // v1.10.2: サイドバー・モデル情報・操作バーの背景を透明にでき、濃さをスライダーで調整可能に（初期値は透明。透明時は文字に縁取りを付与）
 // v1.10.1: 分解ビューが全パーツを同じ方向へ動かすだけで分解されない不具合を修正（各パーツの中心をジオメトリから算出し、モデル中心から放射状に移動。距離はモデルの大きさ基準）
@@ -4737,6 +4831,9 @@ let pricePerKg = 3000;     // 円/kg
 let curBgColor = 0x0d0f14; // 背景色
 let ssInterval = 3;       // スクリーンセーバーの切替間隔（分）
 let ssRandom   = false;   // ランダム順か
+let uiMode = 'auto';      // 'auto'=狭い画面でアイコンメニュー / 'icon'=常にアイコン / 'classic'=従来のサイドバー
+let curCat = null, toastTimer = null;
+let curFileKey = null, curOrient = new THREE.Quaternion(), orientDB = {};
 let panelAlpha = 0;       // サイドバー/情報パネル等の背景の濃さ（0〜1、0で透明）
 let ssGallery  = false;   // true=複数同時表示（ギャラリー）、false=1モデル表示
 let rotSpeed   = 0.01;     // 自動回転の速度（ラジアン/フレーム）
@@ -4748,7 +4845,7 @@ const SETTINGS_KEY = 'ultimateCadViewerSettings_v1';
 function saveSettings(){
   try{
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor, rotSpeed: rotSpeed, ssInterval: ssInterval, ssRandom: ssRandom, ssGallery: ssGallery, panelAlpha: panelAlpha
+      mode: curMode, mat: curMat, density: curDensity, price: pricePerKg, bg: curBgColor, rotSpeed: rotSpeed, ssInterval: ssInterval, ssRandom: ssRandom, ssGallery: ssGallery, panelAlpha: panelAlpha, uiMode: uiMode
     }));
   }catch(e){ /* localStorageが使えない環境では無視 */ }
 }
@@ -4766,6 +4863,7 @@ function loadSettings(){
     if([1,3,5,10].includes(s.ssInterval)) ssInterval = s.ssInterval;
     if(typeof s.ssRandom==='boolean') ssRandom = s.ssRandom;
     if(typeof s.ssGallery==='boolean') ssGallery = s.ssGallery;
+    if(['auto','icon','classic'].includes(s.uiMode)) uiMode = s.uiMode;
     if(typeof s.panelAlpha==='number' && s.panelAlpha>=0 && s.panelAlpha<=1) panelAlpha = s.panelAlpha;
   }catch(e){ /* 無視 */ }
 }
@@ -4792,11 +4890,12 @@ function applyPanelAlpha(a){
   const root = document.documentElement.style;
   root.setProperty('--panel-a', a.toFixed(2));
   root.setProperty('--panel-blur', a < 0.05 ? '0px' : '16px');   // 完全透明のときはぼかしも外してモデルをそのまま見せる
-  document.body.classList.toggle('ui-clear', a < 0.6);
+  document.body.classList.toggle('ui-clear', a < 0.6 && !document.body.classList.contains('icon-ui'));
   document.getElementById('panel-a-val').textContent = Math.round(a*100);
 }
 document.getElementById('panel-a-range').value = Math.round(panelAlpha*100);
 applyPanelAlpha(panelAlpha);
+updateUiMode();
 document.getElementById('panel-a-range').addEventListener('input', e=>{
   applyPanelAlpha(parseInt(e.target.value)/100);
   saveSettings();
@@ -5305,6 +5404,13 @@ async function loadFile(file){
       glbWarning = await loadGLBBuffer(buffer, file.name);
       document.getElementById('i-fmt').textContent='GLB / glTF';
     }
+
+    // 保存済みの向きがあれば適用（ファイル名＋サイズで照合）
+    curFileKey = orientKey(file);
+    curOrient = new THREE.Quaternion();
+    const savedQ = orientDB[curFileKey];
+    if(savedQ){ const q = new THREE.Quaternion().fromArray(savedQ); rotatePartsBy(partMeshes, q); curOrient.copy(q); }
+    updateOrientLabel();
 
     scene.add(modelGroup);
     fitCamera();
@@ -5997,6 +6103,7 @@ function setView(v){
 
 function toggleMenu(){
   document.body.classList.toggle('menu-hidden');
+  if(document.body.classList.contains('menu-hidden')) closeCat();
   window.dispatchEvent(new Event('resize'));
 }
 function toggleAutoRot(){
@@ -6419,8 +6526,11 @@ async function galLoadInto(slot, item){
   modelGroup = slot.inner; partMeshes = [];
   let parts = [];
   try{
-    await loadModelFile(await item.getFile());
+    const f = await item.getFile();
+    await loadModelFile(f);
     parts = partMeshes;
+    const sq = orientDB[orientKey(f)];
+    if(sq && parts.length) rotatePartsBy(parts, new THREE.Quaternion().fromArray(sq));
   } finally { modelGroup = prevGroup; partMeshes = prevParts; }
   if(!parts.length) return false;
   const box = new THREE.Box3();
@@ -6594,6 +6704,145 @@ function galUpdate(){
   galApplyCamera();
 }
 
+
+// ================================================================
+// 向き調整（ジオメトリへ回転を焼き込み、ファイルごとに記憶）
+// ================================================================
+const ORIENT_KEY = 'ultimateCadViewerOrient_v1';
+(function loadOrientDB(){
+  try{ const o = JSON.parse(localStorage.getItem(ORIENT_KEY)||'{}'); if(o && typeof o==='object') orientDB = o; }catch(e){}
+})();
+function saveOrientDB(){ try{ localStorage.setItem(ORIENT_KEY, JSON.stringify(orientDB)); }catch(e){} }
+function orientKey(file){ return file.name+'|'+file.size; }
+
+// パーツ群を全体の中心まわりに回転（ジオメトリに焼き込むので、分解・体積・回転・計測などはそのまま動く）
+function rotatePartsBy(parts, q){
+  if(!parts.length) return;
+  const box = new THREE.Box3();
+  parts.forEach(p=>{
+    const g = p.solid.geometry;
+    if(!g.boundingBox) g.computeBoundingBox();
+    box.union(g.boundingBox);
+  });
+  const c = box.getCenter(new THREE.Vector3());
+  const m = new THREE.Matrix4().makeTranslation(c.x,c.y,c.z)
+    .multiply(new THREE.Matrix4().makeRotationFromQuaternion(q))
+    .multiply(new THREE.Matrix4().makeTranslation(-c.x,-c.y,-c.z));
+  const done = new Set();
+  parts.forEach(p=>{
+    const g = p.solid.geometry;
+    if(done.has(g)) return; done.add(g);
+    g.applyMatrix4(m);
+    g.computeBoundingBox(); g.computeBoundingSphere();
+  });
+}
+function orientRefresh(){
+  clearMeasure();
+  const f = parseFloat(document.getElementById('explode-range').value)||0;
+  applyExplode(f);
+  fitCamera();
+  updateModelInfo();
+  updateOrientLabel();
+}
+function orientApply(q){
+  if(galleryActive){ setStatus('muted','複数表示中は向きを変更できません'); return; }
+  if(!partMeshes.length){ setStatus('muted','先にモデルを読み込んでください'); return; }
+  rotatePartsBy(partMeshes, q);
+  curOrient.premultiply(q);
+  orientRefresh();
+}
+function orientRotate(axis, deg){
+  const v = {x:new THREE.Vector3(1,0,0), y:new THREE.Vector3(0,1,0), z:new THREE.Vector3(0,0,1)}[axis];
+  orientApply(new THREE.Quaternion().setFromAxisAngle(v, deg*Math.PI/180));
+}
+function orientFlip(){ orientRotate('x', 180); }
+function orientZup(){ orientRotate('x', -90); }   // (x,y,z) → (x,z,-y)：Z軸が上のデータをY軸が上のビューアに合わせる
+function orientReset(){
+  if(!partMeshes.length) return;
+  orientApply(curOrient.clone().invert());
+  curOrient = new THREE.Quaternion();
+  updateOrientLabel();
+}
+function orientSave(){
+  if(!curFileKey || !partMeshes.length){ setStatus('muted','先にモデルを読み込んでください'); return; }
+  orientDB[curFileKey] = curOrient.toArray();
+  saveOrientDB();
+  updateOrientLabel();
+  setStatus('ready','💾 この向きを保存しました（次回から自動適用）');
+}
+function orientForget(){
+  if(curFileKey && orientDB[curFileKey]){
+    delete orientDB[curFileKey]; saveOrientDB();
+    setStatus('ready','🗑 保存した向きを削除しました');
+  }
+  updateOrientLabel();
+}
+function updateOrientLabel(){
+  const el = document.getElementById('orient-state');
+  if(!el) return;
+  const saved = curFileKey && orientDB[curFileKey];
+  if(!partMeshes.length || !curFileKey){ el.textContent = '—'; return; }
+  if(!saved){ el.textContent = curOrient.angleTo(new THREE.Quaternion())<1e-4 ? '未保存（元の向き）' : '変更あり（未保存）'; return; }
+  el.textContent = curOrient.angleTo(new THREE.Quaternion().fromArray(saved))<1e-4 ? '💾 保存済み' : '変更あり（保存と相違）';
+}
+function orientExport(){
+  const n = Object.keys(orientDB).length;
+  if(!n){ setStatus('muted','保存済みの向きがありません'); return; }
+  const blob = new Blob([JSON.stringify({app:'ultimate-cad-viewer', version:1, orientations:orientDB}, null, 1)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'cad-viewer-orientations.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  setStatus('ready',`📤 ${n}件の向き設定を書き出しました`);
+}
+document.getElementById('orient-json-in').addEventListener('change', async e=>{
+  const f = e.target.files[0]; e.target.value = '';
+  if(!f) return;
+  try{
+    const o = JSON.parse(await f.text()).orientations;
+    let n = 0;
+    for(const [k,v] of Object.entries(o||{})){
+      if(Array.isArray(v) && v.length===4 && v.every(x=>typeof x==='number' && isFinite(x))){ orientDB[k] = v; n++; }
+    }
+    saveOrientDB(); updateOrientLabel();
+    setStatus(n?'ready':'error', n?`📥 ${n}件の向き設定を読み込みました（次回ファイルを開いたとき適用）`:'❌ 有効な向き設定が見つかりません');
+  }catch(err){ setStatus('error','❌ 向き設定ファイルを読み込めませんでした'); }
+});
+
+// ================================================================
+// アイコンメニュー（スマホ向けUI）
+// ================================================================
+function updateUiMode(){
+  const narrow = window.matchMedia('(max-width:700px)').matches;
+  const icon = uiMode==='icon' || (uiMode==='auto' && narrow);
+  document.body.classList.toggle('icon-ui', icon);
+  if(!icon) closeCat();
+  applyPanelAlpha(panelAlpha);
+  const label = {auto:'自動（狭い画面でアイコン）', icon:'アイコン', classic:'従来'}[uiMode];
+  document.getElementById('btn-uimode').textContent = '📱 メニュー表示: '+label;
+}
+function cycleUiMode(){
+  uiMode = {auto:'icon', icon:'classic', classic:'auto'}[uiMode];
+  saveSettings();
+  updateUiMode();
+}
+window.addEventListener('resize', updateUiMode);
+function openCat(cat){
+  if(curCat === cat){ closeCat(); return; }
+  curCat = cat;
+  document.body.classList.add('cat-open');
+  document.body.dataset.cat = cat;
+  document.querySelectorAll('.sec').forEach(s=>s.classList.toggle('show', s.dataset.cat===cat));
+  document.querySelectorAll('#iconbar .ib[data-cat]').forEach(b=>b.classList.toggle('active', b.dataset.cat===cat));
+  const body = document.getElementById('sidebar-body'); if(body) body.scrollTop = 0;
+}
+function closeCat(){
+  curCat = null;
+  document.body.classList.remove('cat-open');
+  delete document.body.dataset.cat;
+  document.querySelectorAll('.sec.show').forEach(s=>s.classList.remove('show'));
+  document.querySelectorAll('#iconbar .ib.active').forEach(b=>b.classList.remove('active'));
+}
+
 function toggleInfo(){
   infoVisible=!infoVisible;
   document.getElementById('info-ov').style.display=infoVisible?'block':'none';
@@ -6697,6 +6946,11 @@ function setStatus(type,msg){
   else if(type==='error') d.classList.add('error');
   d.style.background={ready:'#2ecc71',loading:'#00d4ff',error:'#e74c3c',warn:'#f1c40f',muted:'#6b7a90'}[type]||'#6b7a90';
   document.getElementById('status-txt').textContent=msg;
+  // アイコンメニュー時はサイドバー下部のステータス行が見えないため、画面上部に一時表示する
+  const t = document.getElementById('status-toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  if(type!=='loading') toastTimer = setTimeout(()=>t.classList.remove('show'), 4000);
 }
 function showLoading(on, txt='', sub=''){
   document.getElementById('loading-ov').classList.toggle('show',on);
